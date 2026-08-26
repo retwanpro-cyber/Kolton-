@@ -13,16 +13,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
-
-@Serializable
-data class RemoteChat(
-    val id: String,
-    val title: String? = null,
-    val name: String? = null,
-    val last_message: String? = null,
-    val updated_at: String? = null
-)
 
 class HomeViewModel : ViewModel() {
 
@@ -63,7 +53,7 @@ class HomeViewModel : ViewModel() {
     private fun startPeriodicSync() {
         viewModelScope.launch {
             while (isActive) {
-                delay(2000)
+                delay(2500)
                 fetchChats()
             }
         }
@@ -74,65 +64,33 @@ class HomeViewModel : ViewModel() {
             val user = SupabaseManager.auth.currentUserOrNull()
             val currentUserId = user?.id ?: ""
 
-            // 1. جلب المحادثات من chats
-            val remoteChats = try {
-                SupabaseManager.postgrest["chats"].select().decodeList<RemoteChat>()
-            } catch (e: Exception) {
-                emptyList()
-            }
-
-            // 2. جلب كل الرسائل
-            val messages = try {
-                SupabaseManager.postgrest["messages"].select().decodeList<RemoteMessage>()
-            } catch (e: Exception) {
-                emptyList()
-            }
+            // جلب جميع الرسائل لتوليد قائمة المحادثات النشطة تلقائياً
+            val messages = SupabaseManager.postgrest["messages"]
+                .select()
+                .decodeList<RemoteMessage>()
 
             val chatMap = mutableMapOf<String, RemoteMessage>()
             for (msg in messages) {
                 chatMap[msg.chat_id] = msg
             }
 
-            val finalChatList = mutableListOf<Chat>()
-
-            // إذا وجدت محادثات مسجلة
-            for (c in remoteChats) {
-                val lastMsg = chatMap[c.id]
-                finalChatList.add(
-                    Chat(
-                        id = c.id,
-                        name = c.title ?: c.name ?: "محادثة",
-                        lastMessage = lastMsg?.text ?: c.last_message ?: "",
-                        lastMessageTime = lastMsg?.created_at ?: c.updated_at ?: "",
-                        avatarUrl = "",
-                        unreadCount = 0
-                    )
-                )
-            }
-
-            // إضافة أي محادثات جاءت في الرسائل ولم تكن في جدول chats
-            for ((chatId, lastMsg) in chatMap) {
-                if (finalChatList.none { it.id == chatId }) {
+            if (chatMap.isNotEmpty()) {
+                val list = chatMap.map { (chatId, lastMsg) ->
                     val otherName = if (lastMsg.sender_id != currentUserId && !lastMsg.sender_name.isNullOrBlank()) {
                         lastMsg.sender_name
                     } else {
-                        "محادثة"
+                        chatId
                     }
-                    finalChatList.add(
-                        Chat(
-                            id = chatId,
-                            name = otherName,
-                            lastMessage = lastMsg.text,
-                            lastMessageTime = lastMsg.created_at ?: "",
-                            avatarUrl = "",
-                            unreadCount = 0
-                        )
+                    Chat(
+                        id = chatId,
+                        name = otherName,
+                        lastMessage = lastMsg.text,
+                        lastMessageTime = lastMsg.created_at ?: "",
+                        avatarUrl = "",
+                        unreadCount = 0
                     )
                 }
-            }
-
-            if (finalChatList.isNotEmpty()) {
-                _chats.value = finalChatList.distinctBy { it.id }
+                _chats.value = list
             }
         } catch (e: Exception) {
             e.printStackTrace()
