@@ -1,0 +1,133 @@
+package com.radwan.nova.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.radwan.nova.data.models.Message
+import com.radwan.nova.data.remote.SupabaseManager
+import com.radwan.nova.data.remote.RemoteMessage
+import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+
+@Serializable
+data class RemoteChatRow(
+    val id: String,
+    val title: String? = null,
+    val name: String? = null,
+    val last_message: String? = null,
+    val updated_at: String? = null
+)
+
+class ChatViewModel : ViewModel() {
+
+    private val _messages = MutableStateFlow<List<Message>>(emptyList())
+    val messages: StateFlow<List<Message>> = _messages.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private var activeChatId: String? = null
+
+    fun loadMessages(chatId: String) {
+        if (chatId.isBlank()) return
+        activeChatId = chatId
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            fetchMessages(chatId)
+            _isLoading.value = false
+
+            // تحديث دوري لجلب الرسائل الجديدة فورياً
+            while (isActive && activeChatId == chatId) {
+                delay(2000)
+                fetchMessages(chatId)
+            }
+        }
+    }
+
+    private suspend fun fetchMessages(chatId: String) {
+        try {
+            val remoteList = SupabaseManager.postgrest["messages"]
+                .select {
+                    filter {
+                        eq("chat_id", chatId)
+                    }
+                }
+                .decodeList<RemoteMessage>()
+
+            _messages.value = remoteList.map { r ->
+                Message(
+                    id = r.id ?: UUID.randomUUID().toString(),
+                    chatId = r.chat_id,
+                    senderId = r.sender_id,
+                    senderName = r.sender_name ?: "مستخدم",
+                    text = r.text,
+                    timestamp = r.created_at ?: ""
+                )
+            }
+        } catch (e: Exception) {
+            // صامت
+        }
+    }
+
+    fun sendMessage(chatId: String, text: String) {
+        if (text.isBlank() || chatId.isBlank()) return
+
+        val user = SupabaseManager.auth.currentUserOrNull()
+        val currentUserId = user?.id ?: "00000000-0000-0000-0000-000000000000"
+        val currentUserName = user?.email?.substringBefore("@") ?: "مستخدم"
+            
+        val newMsgId = UUID.randomUUID().toString()
+        val currentTimeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+
+        val newMsg = Message(
+            id = newMsgId,
+            chatId = chatId,
+            senderId = currentUserId,
+            senderName = currentUserName,
+            text = text.trim(),
+            timestamp = currentTimeStr
+        )
+        // عرض الرسالة محلياً فوراً
+        _messages.value = _messages.value + newMsg
+
+        viewModelScope.launch {
+            try {
+                // 1. تسجيل المحادثة في جدول chats
+                try {
+                    SupabaseManager.postgrest["chats"].upsert(
+                        RemoteChatRow(
+                            id = chatId,
+                            title = currentUserName,
+                            name = currentUserName,
+                            last_message = text.trim(),
+                            updated_at = currentTimeStr
+                        )
+                    )
+                } catch (ignored: Exception) {}
+
+                // 2. إدخال الرسالة في جدول messages
+                val remote = RemoteMessage(
+                    id = newMsgId,
+                    chat_id = chatId,
+                    sender_id = currentUserId,
+                    text = text.trim(),
+                    sender_name = currentUserName
+                )
+                SupabaseManager.postgrest["messages"].insert(remote)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+}
