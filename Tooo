@@ -13,6 +13,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class RemoteChat(
+    val id: String,
+    val title: String? = null,
+    val name: String? = null,
+    val last_message: String? = null,
+    val updated_at: String? = null
+)
 
 class HomeViewModel : ViewModel() {
 
@@ -53,7 +63,7 @@ class HomeViewModel : ViewModel() {
     private fun startPeriodicSync() {
         viewModelScope.launch {
             while (isActive) {
-                delay(3000)
+                delay(2500)
                 fetchChats()
             }
         }
@@ -64,35 +74,67 @@ class HomeViewModel : ViewModel() {
             val user = SupabaseManager.auth.currentUserOrNull()
             val currentUserId = user?.id ?: ""
 
-            val messages = SupabaseManager.postgrest["messages"]
-                .select()
-                .decodeList<RemoteMessage>()
+            // 1. محاولة جلب المحادثات من جدول chats
+            val remoteChats = try {
+                SupabaseManager.postgrest["chats"].select().decodeList<RemoteChat>()
+            } catch (e: Exception) {
+                emptyList()
+            }
+
+            // 2. جلب جميع الرسائل لاكتشاف المحادثات النشطة
+            val messages = try {
+                SupabaseManager.postgrest["messages"].select().decodeList<RemoteMessage>()
+            } catch (e: Exception) {
+                emptyList()
+            }
 
             val chatMap = mutableMapOf<String, RemoteMessage>()
             for (msg in messages) {
                 chatMap[msg.chat_id] = msg
             }
 
-            if (chatMap.isNotEmpty()) {
-                val list = chatMap.map { (chatId, lastMsg) ->
+            val finalChatList = mutableListOf<Chat>()
+
+            // دمج المحادثات
+            if (remoteChats.isNotEmpty()) {
+                for (c in remoteChats) {
+                    val lastMsg = chatMap[c.id]
+                    finalChatList.add(
+                        Chat(
+                            id = c.id,
+                            name = c.title ?: c.name ?: "محادثة",
+                            lastMessage = lastMsg?.text ?: c.last_message ?: "",
+                            lastMessageTime = lastMsg?.created_at ?: c.updated_at ?: "",
+                            avatarUrl = "",
+                            unreadCount = 0
+                        )
+                    )
+                }
+            } else if (chatMap.isNotEmpty()) {
+                for ((chatId, lastMsg) in chatMap) {
                     val otherName = if (lastMsg.sender_id != currentUserId && !lastMsg.sender_name.isNullOrBlank()) {
                         lastMsg.sender_name
                     } else {
                         "محادثة"
                     }
-                    Chat(
-                        id = chatId,
-                        name = otherName,
-                        lastMessage = lastMsg.text,
-                        lastMessageTime = lastMsg.created_at ?: "",
-                        avatarUrl = "",
-                        unreadCount = 0
+                    finalChatList.add(
+                        Chat(
+                            id = chatId,
+                            name = otherName,
+                            lastMessage = lastMsg.text,
+                            lastMessageTime = lastMsg.created_at ?: "",
+                            avatarUrl = "",
+                            unreadCount = 0
+                        )
                     )
                 }
-                _chats.value = list
+            }
+
+            if (finalChatList.isNotEmpty()) {
+                _chats.value = finalChatList.distinctBy { it.id }
             }
         } catch (e: Exception) {
-            // صامت
+            e.printStackTrace()
         }
     }
 }
