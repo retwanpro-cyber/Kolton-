@@ -28,28 +28,34 @@ class ChatViewModel : ViewModel() {
 
     private var activeChatId: String? = null
 
+    // دالة لتوحيد معرّف المحادثة بين الطرفين
+    private fun getUnifiedChatId(rawChatId: String): String {
+        return rawChatId.trim().lowercase()
+    }
+
     fun loadMessages(chatId: String) {
         if (chatId.isBlank()) return
-        activeChatId = chatId
+        val targetChatId = getUnifiedChatId(chatId)
+        activeChatId = targetChatId
 
         viewModelScope.launch {
             _isLoading.value = true
-            fetchMessages(chatId)
+            fetchMessages(targetChatId)
             _isLoading.value = false
 
-            while (isActive && activeChatId == chatId) {
+            while (isActive && activeChatId == targetChatId) {
                 delay(2000)
-                fetchMessages(chatId)
+                fetchMessages(targetChatId)
             }
         }
     }
 
-    private suspend fun fetchMessages(chatId: String) {
+    private suspend fun fetchMessages(targetChatId: String) {
         try {
             val remoteList = SupabaseManager.postgrest["messages"]
                 .select {
                     filter {
-                        eq("chat_id", chatId)
+                        eq("chat_id", targetChatId)
                     }
                 }
                 .decodeList<RemoteMessage>()
@@ -68,13 +74,14 @@ class ChatViewModel : ViewModel() {
                 _messages.value = mapped
             }
         } catch (e: Exception) {
-            // ignore
+            e.printStackTrace()
         }
     }
 
     fun sendMessage(chatId: String, text: String) {
         if (text.isBlank() || chatId.isBlank()) return
 
+        val targetChatId = getUnifiedChatId(chatId)
         val user = SupabaseManager.auth.currentUserOrNull()
         val currentUserId = user?.id ?: "guest-user"
         val currentUserName = user?.email?.substringBefore("@") ?: "مستخدم"
@@ -84,20 +91,21 @@ class ChatViewModel : ViewModel() {
 
         val newMsg = Message(
             id = newMsgId,
-            chatId = chatId,
+            chatId = targetChatId,
             senderId = currentUserId,
             senderName = currentUserName,
             text = text.trim(),
             timestamp = currentTimeStr
         )
         
+        // إظهار الرسالة محلياً
         _messages.value = _messages.value + newMsg
 
         viewModelScope.launch {
             try {
                 val remote = RemoteMessage(
                     id = newMsgId,
-                    chat_id = chatId,
+                    chat_id = targetChatId,
                     sender_id = currentUserId,
                     text = text.trim(),
                     sender_name = currentUserName
