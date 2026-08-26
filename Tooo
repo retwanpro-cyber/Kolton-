@@ -63,7 +63,7 @@ class HomeViewModel : ViewModel() {
     private fun startPeriodicSync() {
         viewModelScope.launch {
             while (isActive) {
-                delay(2500)
+                delay(2000)
                 fetchChats()
             }
         }
@@ -74,14 +74,14 @@ class HomeViewModel : ViewModel() {
             val user = SupabaseManager.auth.currentUserOrNull()
             val currentUserId = user?.id ?: ""
 
-            // 1. محاولة جلب المحادثات من جدول chats
+            // 1. جلب المحادثات من chats
             val remoteChats = try {
                 SupabaseManager.postgrest["chats"].select().decodeList<RemoteChat>()
             } catch (e: Exception) {
                 emptyList()
             }
 
-            // 2. جلب جميع الرسائل لاكتشاف المحادثات النشطة
+            // 2. جلب كل الرسائل
             val messages = try {
                 SupabaseManager.postgrest["messages"].select().decodeList<RemoteMessage>()
             } catch (e: Exception) {
@@ -95,23 +95,24 @@ class HomeViewModel : ViewModel() {
 
             val finalChatList = mutableListOf<Chat>()
 
-            // دمج المحادثات
-            if (remoteChats.isNotEmpty()) {
-                for (c in remoteChats) {
-                    val lastMsg = chatMap[c.id]
-                    finalChatList.add(
-                        Chat(
-                            id = c.id,
-                            name = c.title ?: c.name ?: "محادثة",
-                            lastMessage = lastMsg?.text ?: c.last_message ?: "",
-                            lastMessageTime = lastMsg?.created_at ?: c.updated_at ?: "",
-                            avatarUrl = "",
-                            unreadCount = 0
-                        )
+            // إذا وجدت محادثات مسجلة
+            for (c in remoteChats) {
+                val lastMsg = chatMap[c.id]
+                finalChatList.add(
+                    Chat(
+                        id = c.id,
+                        name = c.title ?: c.name ?: "محادثة",
+                        lastMessage = lastMsg?.text ?: c.last_message ?: "",
+                        lastMessageTime = lastMsg?.created_at ?: c.updated_at ?: "",
+                        avatarUrl = "",
+                        unreadCount = 0
                     )
-                }
-            } else if (chatMap.isNotEmpty()) {
-                for ((chatId, lastMsg) in chatMap) {
+                )
+            }
+
+            // إضافة أي محادثات جاءت في الرسائل ولم تكن في جدول chats
+            for ((chatId, lastMsg) in chatMap) {
+                if (finalChatList.none { it.id == chatId }) {
                     val otherName = if (lastMsg.sender_id != currentUserId && !lastMsg.sender_name.isNullOrBlank()) {
                         lastMsg.sender_name
                     } else {
