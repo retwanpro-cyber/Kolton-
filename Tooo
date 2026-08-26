@@ -1,0 +1,98 @@
+package com.radwan.nova.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.radwan.nova.data.models.Chat
+import com.radwan.nova.data.remote.SupabaseManager
+import com.radwan.nova.data.remote.RemoteMessage
+import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+
+class HomeViewModel : ViewModel() {
+
+    private val _chats = MutableStateFlow<List<Chat>>(emptyList())
+    val chats: StateFlow<List<Chat>> = _chats.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    init {
+        loadChats()
+        startPeriodicSync()
+    }
+
+    fun loadChats() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            fetchChats()
+            _isLoading.value = false
+        }
+    }
+
+    fun fetchRemoteChats() {
+        loadChats()
+    }
+
+    fun logout(onLoggedOut: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                SupabaseManager.auth.signOut()
+                onLoggedOut()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun startPeriodicSync() {
+        viewModelScope.launch {
+            while (isActive) {
+                delay(3000)
+                fetchChats()
+            }
+        }
+    }
+
+    private suspend fun fetchChats() {
+        try {
+            val user = SupabaseManager.auth.currentUserOrNull()
+            val currentUserId = user?.id ?: ""
+
+            val messages = SupabaseManager.postgrest["messages"]
+                .select()
+                .decodeList<RemoteMessage>()
+
+            val chatMap = mutableMapOf<String, RemoteMessage>()
+            for (msg in messages) {
+                chatMap[msg.chat_id] = msg
+            }
+
+            if (chatMap.isNotEmpty()) {
+                val list = chatMap.map { (chatId, lastMsg) ->
+                    val otherName = if (lastMsg.sender_id != currentUserId && !lastMsg.sender_name.isNullOrBlank()) {
+                        lastMsg.sender_name
+                    } else {
+                        "محادثة"
+                    }
+                    Chat(
+                        id = chatId,
+                        name = otherName,
+                        lastMessage = lastMsg.text,
+                        lastMessageTime = lastMsg.created_at ?: "",
+                        avatarUrl = "",
+                        unreadCount = 0
+                    )
+                }
+                _chats.value = list
+            }
+        } catch (e: Exception) {
+            // صامت
+        }
+    }
+}
