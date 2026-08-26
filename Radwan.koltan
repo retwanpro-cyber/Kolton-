@@ -13,27 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
-
-@Serializable
-data class MessageInsert(
-    val id: String,
-    val chat_id: String,
-    val sender_id: String? = null,
-    val sender_name: String? = null,
-    val text: String
-)
-
-@Serializable
-data class ChatInsert(
-    val id: String,
-    val title: String,
-    val last_message: String
-)
 
 class ChatViewModel : ViewModel() {
 
@@ -54,9 +37,8 @@ class ChatViewModel : ViewModel() {
             fetchMessages(chatId)
             _isLoading.value = false
 
-            // فحص دوري مستمر لجلب رسائل الطرف الآخر
             while (isActive && activeChatId == chatId) {
-                delay(1500)
+                delay(2000)
                 fetchMessages(chatId)
             }
         }
@@ -82,11 +64,11 @@ class ChatViewModel : ViewModel() {
                     timestamp = r.created_at ?: ""
                 )
             }
-            if (mapped.isNotEmpty() || _messages.value.isEmpty()) {
+            if (mapped.isNotEmpty()) {
                 _messages.value = mapped
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            // ignore
         }
     }
 
@@ -109,32 +91,18 @@ class ChatViewModel : ViewModel() {
             timestamp = currentTimeStr
         )
         
-        // إظهار الرسالة محلياً فوراً
         _messages.value = _messages.value + newMsg
 
         viewModelScope.launch {
             try {
-                // حفظ المحادثة في جدول chats
-                try {
-                    SupabaseManager.postgrest["chats"].upsert(
-                        ChatInsert(
-                            id = chatId,
-                            title = currentUserName,
-                            last_message = text.trim()
-                        )
-                    )
-                } catch (ignored: Exception) {}
-
-                // إرسال الرسالة إلى جدول messages
-                SupabaseManager.postgrest["messages"].insert(
-                    MessageInsert(
-                        id = newMsgId,
-                        chat_id = chatId,
-                        sender_id = currentUserId,
-                        sender_name = currentUserName,
-                        text = text.trim()
-                    )
+                val remote = RemoteMessage(
+                    id = newMsgId,
+                    chat_id = chatId,
+                    sender_id = currentUserId,
+                    text = text.trim(),
+                    sender_name = currentUserName
                 )
+                SupabaseManager.postgrest["messages"].insert(remote)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
