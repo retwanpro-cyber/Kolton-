@@ -20,7 +20,7 @@ import java.util.Locale
 import java.util.UUID
 
 @Serializable
-data class RemoteChatRow(
+data class RemoteChatRecord(
     val id: String,
     val title: String? = null,
     val name: String? = null,
@@ -47,9 +47,8 @@ class ChatViewModel : ViewModel() {
             fetchMessages(chatId)
             _isLoading.value = false
 
-            // تحديث دوري لجلب الرسائل الجديدة فورياً
             while (isActive && activeChatId == chatId) {
-                delay(2000)
+                delay(2500)
                 fetchMessages(chatId)
             }
         }
@@ -65,18 +64,21 @@ class ChatViewModel : ViewModel() {
                 }
                 .decodeList<RemoteMessage>()
 
-            _messages.value = remoteList.map { r ->
-                Message(
-                    id = r.id ?: UUID.randomUUID().toString(),
-                    chatId = r.chat_id,
-                    senderId = r.sender_id,
-                    senderName = r.sender_name ?: "مستخدم",
-                    text = r.text,
-                    timestamp = r.created_at ?: ""
-                )
+            if (remoteList.isNotEmpty()) {
+                val mapped = remoteList.map { r ->
+                    Message(
+                        id = r.id ?: UUID.randomUUID().toString(),
+                        chatId = r.chat_id,
+                        senderId = r.sender_id,
+                        senderName = r.sender_name ?: "مستخدم",
+                        text = r.text,
+                        timestamp = r.created_at ?: ""
+                    )
+                }
+                _messages.value = mapped
             }
         } catch (e: Exception) {
-            // صامت
+            e.printStackTrace()
         }
     }
 
@@ -98,15 +100,16 @@ class ChatViewModel : ViewModel() {
             text = text.trim(),
             timestamp = currentTimeStr
         )
-        // عرض الرسالة محلياً فوراً
+        
+        // إضافة الرسالة فورياً دون مسحها
         _messages.value = _messages.value + newMsg
 
         viewModelScope.launch {
             try {
-                // 1. تسجيل المحادثة في جدول chats
+                // حفظ المحادثة في جدول chats
                 try {
                     SupabaseManager.postgrest["chats"].upsert(
-                        RemoteChatRow(
+                        RemoteChatRecord(
                             id = chatId,
                             title = currentUserName,
                             name = currentUserName,
@@ -116,7 +119,7 @@ class ChatViewModel : ViewModel() {
                     )
                 } catch (ignored: Exception) {}
 
-                // 2. إدخال الرسالة في جدول messages
+                // حفظ الرسالة في جدول messages
                 val remote = RemoteMessage(
                     id = newMsgId,
                     chat_id = chatId,
