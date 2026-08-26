@@ -20,12 +20,19 @@ import java.util.Locale
 import java.util.UUID
 
 @Serializable
-data class RemoteChatRecord(
+data class MessageInsert(
     val id: String,
-    val title: String? = null,
-    val name: String? = null,
-    val last_message: String? = null,
-    val updated_at: String? = null
+    val chat_id: String,
+    val sender_id: String,
+    val sender_name: String,
+    val text: String
+)
+
+@Serializable
+data class ChatInsert(
+    val id: String,
+    val title: String,
+    val last_message: String
 )
 
 class ChatViewModel : ViewModel() {
@@ -47,8 +54,9 @@ class ChatViewModel : ViewModel() {
             fetchMessages(chatId)
             _isLoading.value = false
 
+            // فحص دوري كل 2 ثانية لجلب الرسائل من الطرف الآخر
             while (isActive && activeChatId == chatId) {
-                delay(2500)
+                delay(2000)
                 fetchMessages(chatId)
             }
         }
@@ -101,33 +109,32 @@ class ChatViewModel : ViewModel() {
             timestamp = currentTimeStr
         )
         
-        // إضافة الرسالة فورياً دون مسحها
+        // إظهار الرسالة محلياً فوراً
         _messages.value = _messages.value + newMsg
 
         viewModelScope.launch {
             try {
-                // حفظ المحادثة في جدول chats
+                // إدخال المحادثة
                 try {
                     SupabaseManager.postgrest["chats"].upsert(
-                        RemoteChatRecord(
+                        ChatInsert(
                             id = chatId,
                             title = currentUserName,
-                            name = currentUserName,
-                            last_message = text.trim(),
-                            updated_at = currentTimeStr
+                            last_message = text.trim()
                         )
                     )
                 } catch (ignored: Exception) {}
 
-                // حفظ الرسالة في جدول messages
-                val remote = RemoteMessage(
-                    id = newMsgId,
-                    chat_id = chatId,
-                    sender_id = currentUserId,
-                    text = text.trim(),
-                    sender_name = currentUserName
+                // إدخال الرسالة
+                SupabaseManager.postgrest["messages"].insert(
+                    MessageInsert(
+                        id = newMsgId,
+                        chat_id = chatId,
+                        sender_id = currentUserId,
+                        sender_name = currentUserName,
+                        text = text.trim()
+                    )
                 )
-                SupabaseManager.postgrest["messages"].insert(remote)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
