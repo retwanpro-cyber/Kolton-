@@ -28,34 +28,29 @@ class ChatViewModel : ViewModel() {
 
     private var activeChatId: String? = null
 
-    // دالة لتوحيد معرّف المحادثة بين الطرفين
-    private fun getUnifiedChatId(rawChatId: String): String {
-        return rawChatId.trim().lowercase()
-    }
-
     fun loadMessages(chatId: String) {
         if (chatId.isBlank()) return
-        val targetChatId = getUnifiedChatId(chatId)
-        activeChatId = targetChatId
+        activeChatId = chatId
 
         viewModelScope.launch {
             _isLoading.value = true
-            fetchMessages(targetChatId)
+            fetchMessages(chatId)
             _isLoading.value = false
 
-            while (isActive && activeChatId == targetChatId) {
+            // فحص دوري كل ثانيتين لجلب الرسائل الجديدة الخاصة بهذه المحادثة فقط
+            while (isActive && activeChatId == chatId) {
                 delay(2000)
-                fetchMessages(targetChatId)
+                fetchMessages(chatId)
             }
         }
     }
 
-    private suspend fun fetchMessages(targetChatId: String) {
+    private suspend fun fetchMessages(chatId: String) {
         try {
             val remoteList = SupabaseManager.postgrest["messages"]
                 .select {
                     filter {
-                        eq("chat_id", targetChatId)
+                        eq("chat_id", chatId)
                     }
                 }
                 .decodeList<RemoteMessage>()
@@ -70,7 +65,7 @@ class ChatViewModel : ViewModel() {
                     timestamp = r.created_at ?: ""
                 )
             }
-            if (mapped.isNotEmpty()) {
+            if (mapped.isNotEmpty() || _messages.value.isEmpty()) {
                 _messages.value = mapped
             }
         } catch (e: Exception) {
@@ -81,9 +76,8 @@ class ChatViewModel : ViewModel() {
     fun sendMessage(chatId: String, text: String) {
         if (text.isBlank() || chatId.isBlank()) return
 
-        val targetChatId = getUnifiedChatId(chatId)
         val user = SupabaseManager.auth.currentUserOrNull()
-        val currentUserId = user?.id ?: "guest-user"
+        val currentUserId = user?.id ?: "guest"
         val currentUserName = user?.email?.substringBefore("@") ?: "مستخدم"
             
         val newMsgId = UUID.randomUUID().toString()
@@ -91,21 +85,20 @@ class ChatViewModel : ViewModel() {
 
         val newMsg = Message(
             id = newMsgId,
-            chatId = targetChatId,
+            chatId = chatId,
             senderId = currentUserId,
             senderName = currentUserName,
             text = text.trim(),
             timestamp = currentTimeStr
         )
         
-        // إظهار الرسالة محلياً
         _messages.value = _messages.value + newMsg
 
         viewModelScope.launch {
             try {
                 val remote = RemoteMessage(
                     id = newMsgId,
-                    chat_id = targetChatId,
+                    chat_id = chatId,
                     sender_id = currentUserId,
                     text = text.trim(),
                     sender_name = currentUserName
