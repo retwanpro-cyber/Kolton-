@@ -23,8 +23,8 @@ import java.util.UUID
 data class MessageInsert(
     val id: String,
     val chat_id: String,
-    val sender_id: String,
-    val sender_name: String,
+    val sender_id: String? = null,
+    val sender_name: String? = null,
     val text: String
 )
 
@@ -54,9 +54,9 @@ class ChatViewModel : ViewModel() {
             fetchMessages(chatId)
             _isLoading.value = false
 
-            // فحص دوري كل 2 ثانية لجلب الرسائل من الطرف الآخر
+            // فحص دوري مستمر لجلب رسائل الطرف الآخر
             while (isActive && activeChatId == chatId) {
-                delay(2000)
+                delay(1500)
                 fetchMessages(chatId)
             }
         }
@@ -72,17 +72,17 @@ class ChatViewModel : ViewModel() {
                 }
                 .decodeList<RemoteMessage>()
 
-            if (remoteList.isNotEmpty()) {
-                val mapped = remoteList.map { r ->
-                    Message(
-                        id = r.id ?: UUID.randomUUID().toString(),
-                        chatId = r.chat_id,
-                        senderId = r.sender_id,
-                        senderName = r.sender_name ?: "مستخدم",
-                        text = r.text,
-                        timestamp = r.created_at ?: ""
-                    )
-                }
+            val mapped = remoteList.map { r ->
+                Message(
+                    id = r.id ?: UUID.randomUUID().toString(),
+                    chatId = r.chat_id,
+                    senderId = r.sender_id ?: "",
+                    senderName = r.sender_name ?: "مستخدم",
+                    text = r.text,
+                    timestamp = r.created_at ?: ""
+                )
+            }
+            if (mapped.isNotEmpty() || _messages.value.isEmpty()) {
                 _messages.value = mapped
             }
         } catch (e: Exception) {
@@ -94,7 +94,7 @@ class ChatViewModel : ViewModel() {
         if (text.isBlank() || chatId.isBlank()) return
 
         val user = SupabaseManager.auth.currentUserOrNull()
-        val currentUserId = user?.id ?: "00000000-0000-0000-0000-000000000000"
+        val currentUserId = user?.id ?: "guest-user"
         val currentUserName = user?.email?.substringBefore("@") ?: "مستخدم"
             
         val newMsgId = UUID.randomUUID().toString()
@@ -114,7 +114,7 @@ class ChatViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                // إدخال المحادثة
+                // حفظ المحادثة في جدول chats
                 try {
                     SupabaseManager.postgrest["chats"].upsert(
                         ChatInsert(
@@ -125,7 +125,7 @@ class ChatViewModel : ViewModel() {
                     )
                 } catch (ignored: Exception) {}
 
-                // إدخال الرسالة
+                // إرسال الرسالة إلى جدول messages
                 SupabaseManager.postgrest["messages"].insert(
                     MessageInsert(
                         id = newMsgId,
