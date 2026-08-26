@@ -63,24 +63,41 @@ class HomeViewModel : ViewModel() {
         try {
             val user = SupabaseManager.auth.currentUserOrNull()
             val currentUserId = user?.id ?: ""
+            val currentUserEmail = user?.email?.substringBefore("@") ?: ""
 
-            // جلب جميع الرسائل لتوليد قائمة المحادثات النشطة تلقائياً
-            val messages = SupabaseManager.postgrest["messages"]
+            if (currentUserId.isBlank() && currentUserEmail.isBlank()) {
+                return
+            }
+
+            // جلب الرسائل
+            val allMessages = SupabaseManager.postgrest["messages"]
                 .select()
                 .decodeList<RemoteMessage>()
 
+            // فلترة الرسائل: إظهار المحادثات التي يكون المستخدم الحالي طرفاً فيها فقط!
+            val myMessages = allMessages.filter { msg ->
+                msg.sender_id == currentUserId || 
+                (currentUserId.isNotBlank() && msg.chat_id.contains(currentUserId)) ||
+                (currentUserEmail.isNotBlank() && msg.chat_id.contains(currentUserEmail))
+            }
+
             val chatMap = mutableMapOf<String, RemoteMessage>()
-            for (msg in messages) {
+            for (msg in myMessages) {
                 chatMap[msg.chat_id] = msg
             }
 
             if (chatMap.isNotEmpty()) {
                 val list = chatMap.map { (chatId, lastMsg) ->
+                    // اسم المحادثة هو اسم الطرف الآخر
                     val otherName = if (lastMsg.sender_id != currentUserId && !lastMsg.sender_name.isNullOrBlank()) {
                         lastMsg.sender_name
                     } else {
-                        chatId
+                        // استخراج اسم الطرف الآخر من معرف المحادثة
+                        val parts = chatId.split("__", "_")
+                        val other = parts.firstOrNull { it != currentUserId && it != currentUserEmail }
+                        other ?: "محادثة خاصة"
                     }
+
                     Chat(
                         id = chatId,
                         name = otherName,
@@ -91,6 +108,8 @@ class HomeViewModel : ViewModel() {
                     )
                 }
                 _chats.value = list
+            } else {
+                _chats.value = emptyList()
             }
         } catch (e: Exception) {
             e.printStackTrace()
