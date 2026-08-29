@@ -62,10 +62,10 @@ class HomeViewModel : ViewModel() {
     private suspend fun fetchChats() {
         try {
             val user = SupabaseManager.auth.currentUserOrNull()
-            val currentUserId = user?.id ?: ""
-            val currentUserEmail = user?.email?.substringBefore("@") ?: ""
+            val myUsername = user?.email?.substringBefore("@")?.lowercase() ?: ""
+            val myUserId = user?.id ?: ""
 
-            if (currentUserId.isBlank() && currentUserEmail.isBlank()) {
+            if (myUsername.isBlank() && myUserId.isBlank()) {
                 return
             }
 
@@ -74,11 +74,13 @@ class HomeViewModel : ViewModel() {
                 .select()
                 .decodeList<RemoteMessage>()
 
-            // فلترة الرسائل: إظهار المحادثات التي يكون المستخدم الحالي طرفاً فيها فقط!
+            // فلترة الرسائل: إظهار المحادثات التي يكون اسم المستخدم الحالي جزءاً من معرفها فقط
             val myMessages = allMessages.filter { msg ->
-                msg.sender_id == currentUserId || 
-                (currentUserId.isNotBlank() && msg.chat_id.contains(currentUserId)) ||
-                (currentUserEmail.isNotBlank() && msg.chat_id.contains(currentUserEmail))
+                val chatId = msg.chat_id.lowercase()
+                chatId.contains("__") && (
+                    (myUsername.isNotBlank() && (chatId.startsWith("${myUsername}__") || chatId.endsWith("__${myUsername}"))) ||
+                    (myUserId.isNotBlank() && (chatId.startsWith("${myUserId}__") || chatId.endsWith("__${myUserId}")))
+                )
             }
 
             val chatMap = mutableMapOf<String, RemoteMessage>()
@@ -88,19 +90,13 @@ class HomeViewModel : ViewModel() {
 
             if (chatMap.isNotEmpty()) {
                 val list = chatMap.map { (chatId, lastMsg) ->
-                    // اسم المحادثة هو اسم الطرف الآخر
-                    val otherName = if (lastMsg.sender_id != currentUserId && !lastMsg.sender_name.isNullOrBlank()) {
-                        lastMsg.sender_name
-                    } else {
-                        // استخراج اسم الطرف الآخر من معرف المحادثة
-                        val parts = chatId.split("__", "_")
-                        val other = parts.firstOrNull { it != currentUserId && it != currentUserEmail }
-                        other ?: "محادثة خاصة"
-                    }
+                    // استخراج اسم الطرف الآخر حصراً
+                    val parts = chatId.split("__")
+                    val otherUsername = parts.firstOrNull { it != myUsername && it != myUserId } ?: "محادثة خاصة"
 
                     Chat(
-                        id = chatId,
-                        name = otherName,
+                        id = otherUsername,
+                        name = otherUsername,
                         lastMessage = lastMsg.text,
                         lastMessageTime = lastMsg.created_at ?: "",
                         avatarUrl = "",
