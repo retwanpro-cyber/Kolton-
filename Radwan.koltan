@@ -28,29 +28,48 @@ class ChatViewModel : ViewModel() {
 
     private var activeChatId: String? = null
 
+    // دالة توليد معرّف محادثة خاص وموحد حصراً بين الطرفين
+    private fun getPrivateChatId(targetUserOrChatId: String): String {
+        val user = SupabaseManager.auth.currentUserOrNull()
+        val myIdentifier = user?.email?.substringBefore("@")?.lowercase() ?: user?.id ?: "me"
+        val otherIdentifier = targetUserOrChatId.trim().lowercase()
+
+        // إذا كان المعرف بالفعل يحتوي على الطرفين مسبقاً
+        if (otherIdentifier.contains("__")) {
+            return otherIdentifier
+        }
+
+        // دمج الاسمين أبجدياً لضمان تطابق معرف الغرفة للطرفين
+        return if (myIdentifier < otherIdentifier) {
+            "${myIdentifier}__${otherIdentifier}"
+        } else {
+            "${otherIdentifier}__${myIdentifier}"
+        }
+    }
+
     fun loadMessages(chatId: String) {
         if (chatId.isBlank()) return
-        activeChatId = chatId
+        val privateChatId = getPrivateChatId(chatId)
+        activeChatId = privateChatId
 
         viewModelScope.launch {
             _isLoading.value = true
-            fetchMessages(chatId)
+            fetchMessages(privateChatId)
             _isLoading.value = false
 
-            // فحص دوري كل ثانيتين لجلب الرسائل الجديدة الخاصة بهذه المحادثة فقط
-            while (isActive && activeChatId == chatId) {
+            while (isActive && activeChatId == privateChatId) {
                 delay(2000)
-                fetchMessages(chatId)
+                fetchMessages(privateChatId)
             }
         }
     }
 
-    private suspend fun fetchMessages(chatId: String) {
+    private suspend fun fetchMessages(privateChatId: String) {
         try {
             val remoteList = SupabaseManager.postgrest["messages"]
                 .select {
                     filter {
-                        eq("chat_id", chatId)
+                        eq("chat_id", privateChatId)
                     }
                 }
                 .decodeList<RemoteMessage>()
@@ -76,6 +95,7 @@ class ChatViewModel : ViewModel() {
     fun sendMessage(chatId: String, text: String) {
         if (text.isBlank() || chatId.isBlank()) return
 
+        val privateChatId = getPrivateChatId(chatId)
         val user = SupabaseManager.auth.currentUserOrNull()
         val currentUserId = user?.id ?: "guest"
         val currentUserName = user?.email?.substringBefore("@") ?: "مستخدم"
@@ -85,7 +105,7 @@ class ChatViewModel : ViewModel() {
 
         val newMsg = Message(
             id = newMsgId,
-            chatId = chatId,
+            chatId = privateChatId,
             senderId = currentUserId,
             senderName = currentUserName,
             text = text.trim(),
@@ -98,7 +118,7 @@ class ChatViewModel : ViewModel() {
             try {
                 val remote = RemoteMessage(
                     id = newMsgId,
-                    chat_id = chatId,
+                    chat_id = privateChatId,
                     sender_id = currentUserId,
                     text = text.trim(),
                     sender_name = currentUserName
