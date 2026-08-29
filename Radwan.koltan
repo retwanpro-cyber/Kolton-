@@ -28,48 +28,50 @@ class ChatViewModel : ViewModel() {
 
     private var activeChatId: String? = null
 
-    // دالة توليد معرّف محادثة خاص وموحد حصراً بين الطرفين
-    private fun getPrivateChatId(targetUserOrChatId: String): String {
+    // تنظيف وتوحيد معرف الغرفة المشتركة بين أي طرفين
+    private fun getPrivateChatId(rawInput: String): String {
         val user = SupabaseManager.auth.currentUserOrNull()
-        val myIdentifier = user?.email?.substringBefore("@")?.lowercase() ?: user?.id ?: "me"
-        val otherIdentifier = targetUserOrChatId.trim().lowercase()
+        val myName = (user?.email?.substringBefore("@") ?: user?.id ?: "user").trim().lowercase()
+        val target = rawInput.trim().lowercase()
 
-        // إذا كان المعرف بالفعل يحتوي على الطرفين مسبقاً
-        if (otherIdentifier.contains("__")) {
-            return otherIdentifier
+        // إذا كانت الغرفة مدمجة مسبقاً (مثلاً: user1__user2)
+        if (target.contains("__")) {
+            val parts = target.split("__").map { it.trim() }.sorted()
+            return "${parts[0]}__${parts[1]}"
         }
 
-        // دمج الاسمين أبجدياً لضمان تطابق معرف الغرفة للطرفين
-        return if (myIdentifier < otherIdentifier) {
-            "${myIdentifier}__${otherIdentifier}"
+        // دمج الاسمين ترتيباً أبجدياً لتطابق الغرفة عند كلا الطرفين 100%
+        return if (myName < target) {
+            "${myName}__${target}"
         } else {
-            "${otherIdentifier}__${myIdentifier}"
+            "${target}__${myName}"
         }
     }
 
     fun loadMessages(chatId: String) {
         if (chatId.isBlank()) return
-        val privateChatId = getPrivateChatId(chatId)
-        activeChatId = privateChatId
+        val targetRoom = getPrivateChatId(chatId)
+        activeChatId = targetRoom
 
         viewModelScope.launch {
             _isLoading.value = true
-            fetchMessages(privateChatId)
+            fetchMessages(targetRoom)
             _isLoading.value = false
 
-            while (isActive && activeChatId == privateChatId) {
-                delay(2000)
-                fetchMessages(privateChatId)
+            // مزامنة حية كل ثانية لجلب أي رسالة يرسلها الطرف الآخر فوراً
+            while (isActive && activeChatId == targetRoom) {
+                delay(1500)
+                fetchMessages(targetRoom)
             }
         }
     }
 
-    private suspend fun fetchMessages(privateChatId: String) {
+    private suspend fun fetchMessages(targetRoom: String) {
         try {
             val remoteList = SupabaseManager.postgrest["messages"]
                 .select {
                     filter {
-                        eq("chat_id", privateChatId)
+                        eq("chat_id", targetRoom)
                     }
                 }
                 .decodeList<RemoteMessage>()
@@ -84,9 +86,7 @@ class ChatViewModel : ViewModel() {
                     timestamp = r.created_at ?: ""
                 )
             }
-            if (mapped.isNotEmpty() || _messages.value.isEmpty()) {
-                _messages.value = mapped
-            }
+            _messages.value = mapped
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -95,7 +95,7 @@ class ChatViewModel : ViewModel() {
     fun sendMessage(chatId: String, text: String) {
         if (text.isBlank() || chatId.isBlank()) return
 
-        val privateChatId = getPrivateChatId(chatId)
+        val targetRoom = getPrivateChatId(chatId)
         val user = SupabaseManager.auth.currentUserOrNull()
         val currentUserId = user?.id ?: "guest"
         val currentUserName = user?.email?.substringBefore("@") ?: "مستخدم"
@@ -105,7 +105,7 @@ class ChatViewModel : ViewModel() {
 
         val newMsg = Message(
             id = newMsgId,
-            chatId = privateChatId,
+            chatId = targetRoom,
             senderId = currentUserId,
             senderName = currentUserName,
             text = text.trim(),
@@ -118,7 +118,7 @@ class ChatViewModel : ViewModel() {
             try {
                 val remote = RemoteMessage(
                     id = newMsgId,
-                    chat_id = privateChatId,
+                    chat_id = targetRoom,
                     sender_id = currentUserId,
                     text = text.trim(),
                     sender_name = currentUserName
