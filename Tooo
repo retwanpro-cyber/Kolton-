@@ -24,7 +24,7 @@ class HomeViewModel : ViewModel() {
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     init {
-        setUserOnlineStatus(true)
+        setOnline(true)
         loadChats()
         startPeriodicSync()
     }
@@ -41,19 +41,14 @@ class HomeViewModel : ViewModel() {
         loadChats()
     }
 
-    private fun setUserOnlineStatus(isOnline: Boolean) {
+    private fun setOnline(online: Boolean) {
         viewModelScope.launch {
             try {
-                val user = SupabaseManager.auth.currentUserOrNull()
-                val myId = user?.id
-                if (!myId.isNullOrBlank()) {
-                    SupabaseManager.postgrest["profiles"].update(
-                        mapOf("is_online" to isOnline)
-                    ) {
-                        filter {
-                            eq("id", myId)
-                        }
-                    }
+                val myId = SupabaseManager.auth.currentUserOrNull()?.id ?: return@launch
+                SupabaseManager.postgrest["profiles"].update(
+                    mapOf("is_online" to online)
+                ) {
+                    filter { eq("id", myId) }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -64,19 +59,15 @@ class HomeViewModel : ViewModel() {
     fun logout(onLoggedOut: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                // 1. تعيين حالة المستخدم أوفلاين في قاعدة البيانات فوراً
-                val user = SupabaseManager.auth.currentUserOrNull()
-                val myId = user?.id
+                // تعيين الحساب كغير متصل فوراً عند الخروج
+                val myId = SupabaseManager.auth.currentUserOrNull()?.id
                 if (!myId.isNullOrBlank()) {
                     SupabaseManager.postgrest["profiles"].update(
                         mapOf("is_online" to false)
                     ) {
-                        filter {
-                            eq("id", myId)
-                        }
+                        filter { eq("id", myId) }
                     }
                 }
-                // 2. تسجيل الخروج من Supabase
                 SupabaseManager.auth.signOut()
                 onLoggedOut()
             } catch (e: Exception) {
@@ -97,51 +88,58 @@ class HomeViewModel : ViewModel() {
 
     private suspend fun fetchChats() {
         try {
-            val user = SupabaseManager.auth.currentUserOrNull()
-            val myUsername = user?.email?.substringBefore("@")?.trim()?.lowercase() ?: ""
-            val myUserId = user?.id?.trim()?.lowercase() ?: ""
+            val myUser = SupabaseManager.auth.currentUserOrNull()
+            val myId = myUser?.id?.lowercase() ?: return
 
-            if (myUsername.isBlank() && myUserId.isBlank()) return
-
+            // 1. جلب الرسائل
             val allMessages = SupabaseManager.postgrest["messages"]
                 .select()
                 .decodeList<RemoteMessage>()
 
-            // جلب المحادثات التي يكون المستخدم الحالي طرفاً فيها فقط
+            // 2. تصفية الغرف التي ينتمي إليها المستخدم الحالي فقط
             val myMessages = allMessages.filter { msg ->
                 val room = msg.chat_id.lowercase()
-                if (room.contains("__")) {
-                    val participants = room.split("__").map { it.trim() }
-                    participants.contains(myUsername) || (myUserId.isNotBlank() && participants.contains(myUserId))
-                } else {
-                    false
-                }
+                room.contains("__") && room.split("__").contains(myId)
             }
 
-            // تجميع آخر رسالة لكل محادثة
-            val chatMap = mutableMapOf<String, RemoteMessage>()
-            for (msg in myMessages) {
-                chatMap[msg.chat_id] = msg
-            }
-
-            if (chatMap.isNotEmpty()) {
-                val list = chatMap.map { (roomId, lastMsg) ->
-                    val participants = roomId.split("__").map { it.trim() }
-                    val otherParty = participants.firstOrNull { it != myUsername && it != myUserId } ?: "محادثة"
-
-                    Chat(
-                        id = otherParty,
-                        name = otherParty,
-                        lastMessage = lastMsg.text,
-                        lastMessageTime = lastMsg.created_at ?: "",
-                        avatarUrl = "",
-                        unreadCount = 0
-                    )
-                }
-                _chats.value = list
-            } else {
+            if (myMessages.isEmpty()) {
                 _chats.value = emptyList()
+                return
             }
+
+            // 3. جلب جميع البروفايلات لمعرفة أسماء وصور الأطراف الأخرى
+            val allProfiles = try {
+                SupabaseManager.postgrest["profiles"]
+                    .select()
+                    .decodeList<RemoteProfile>()
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val profileMap = allProfiles.associateBy { it.id.lowercase() }
+
+            // 4. تجميع آخر رسالة لكل غرفة
+            val roomMap = mutableMapOf<String, RemoteMessage>()
+            for (msg in myMessages) {
+                roomMap[msg.chat_id] = msg
+            }
+
+            val chatList = roomMap.map { (roomId, lastMsg) ->
+                val participants = roomId.split("__")
+                val otherUserId = participants.firstOrNull { it != myId } ?: participants[0]
+                val otherProfile = profileMap[otherUserId]
+                val displayName = otherProfile?.username ?: otherProfile?.full_name ?: (if (lastMsg.sender_id != myId) lastMsg.sender_name else "مستخدم") ?: "محادثة خاصة"
+
+                Chat(
+                    id = roomId, // نمرر الـ roomId بالكامل لفتح نفس الغرفة بالضبط!
+                    name = displayName,
+                    lastMessage = lastMsg.text,
+                    lastMessageTime = lastMsg.created_at ?: "",
+                    avatarUrl = otherProfile?.avatar_url ?: "",
+                    unreadCount = 0
+                )
+            }
+
+            _chats.value = chatList
         } catch (e: Exception) {
             e.printStackTrace()
         }
