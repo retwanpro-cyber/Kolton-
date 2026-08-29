@@ -2,7 +2,7 @@ package com.radwan.nova.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.radwan.nova.data.models.Chat
+import com.radwan.nova.data.models.Message
 import com.radwan.nova.data.remote.SupabaseManager
 import com.radwan.nova.data.remote.RemoteMessage
 import io.github.jan.supabase.gotrue.auth
@@ -13,102 +13,120 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 
-class HomeViewModel : ViewModel() {
+class ChatViewModel : ViewModel() {
 
-    private val _chats = MutableStateFlow<List<Chat>>(emptyList())
-    val chats: StateFlow<List<Chat>> = _chats.asStateFlow()
+    private val _messages = MutableStateFlow<List<Message>>(emptyList())
+    val messages: StateFlow<List<Message>> = _messages.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    init {
-        loadChats()
-        startPeriodicSync()
-    }
+    private var activeChatId: String? = null
 
-    fun loadChats() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            fetchChats()
-            _isLoading.value = false
+    // تنظيف وتوحيد معرف الغرفة المشتركة بين أي طرفين
+    private fun getPrivateChatId(rawInput: String): String {
+        val user = SupabaseManager.auth.currentUserOrNull()
+        val myName = (user?.email?.substringBefore("@") ?: user?.id ?: "user").trim().lowercase()
+        val target = rawInput.trim().lowercase()
+
+        // إذا كانت الغرفة مدمجة مسبقاً (مثلاً: user1__user2)
+        if (target.contains("__")) {
+            val parts = target.split("__").map { it.trim() }.sorted()
+            return "${parts[0]}__${parts[1]}"
+        }
+
+        // دمج الاسمين ترتيباً أبجدياً لتطابق الغرفة عند كلا الطرفين 100%
+        return if (myName < target) {
+            "${myName}__${target}"
+        } else {
+            "${target}__${myName}"
         }
     }
 
-    fun fetchRemoteChats() {
-        loadChats()
+    fun loadMessages(chatId: String) {
+        if (chatId.isBlank()) return
+        val targetRoom = getPrivateChatId(chatId)
+        activeChatId = targetRoom
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            fetchMessages(targetRoom)
+            _isLoading.value = false
+
+            // مزامنة حية كل ثانية لجلب أي رسالة يرسلها الطرف الآخر فوراً
+            while (isActive && activeChatId == targetRoom) {
+                delay(1500)
+                fetchMessages(targetRoom)
+            }
+        }
     }
 
-    fun logout(onLoggedOut: () -> Unit = {}) {
+    private suspend fun fetchMessages(targetRoom: String) {
+        try {
+            val remoteList = SupabaseManager.postgrest["messages"]
+                .select {
+                    filter {
+                        eq("chat_id", targetRoom)
+                    }
+                }
+                .decodeList<RemoteMessage>()
+
+            val mapped = remoteList.map { r ->
+                Message(
+                    id = r.id ?: UUID.randomUUID().toString(),
+                    chatId = r.chat_id,
+                    senderId = r.sender_id ?: "",
+                    senderName = r.sender_name ?: "مستخدم",
+                    text = r.text,
+                    timestamp = r.created_at ?: ""
+                )
+            }
+            _messages.value = mapped
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun sendMessage(chatId: String, text: String) {
+        if (text.isBlank() || chatId.isBlank()) return
+
+        val targetRoom = getPrivateChatId(chatId)
+        val user = SupabaseManager.auth.currentUserOrNull()
+        val currentUserId = user?.id ?: "guest"
+        val currentUserName = user?.email?.substringBefore("@") ?: "مستخدم"
+            
+        val newMsgId = UUID.randomUUID().toString()
+        val currentTimeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+
+        val newMsg = Message(
+            id = newMsgId,
+            chatId = targetRoom,
+            senderId = currentUserId,
+            senderName = currentUserName,
+            text = text.trim(),
+            timestamp = currentTimeStr
+        )
+        
+        _messages.value = _messages.value + newMsg
+
         viewModelScope.launch {
             try {
-                SupabaseManager.auth.signOut()
-                onLoggedOut()
+                val remote = RemoteMessage(
+                    id = newMsgId,
+                    chat_id = targetRoom,
+                    sender_id = currentUserId,
+                    text = text.trim(),
+                    sender_name = currentUserName
+                )
+                SupabaseManager.postgrest["messages"].insert(remote)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-        }
-    }
-
-    private fun startPeriodicSync() {
-        viewModelScope.launch {
-            while (isActive) {
-                delay(2500)
-                fetchChats()
-            }
-        }
-    }
-
-    private suspend fun fetchChats() {
-        try {
-            val user = SupabaseManager.auth.currentUserOrNull()
-            val myUsername = user?.email?.substringBefore("@")?.lowercase() ?: ""
-            val myUserId = user?.id ?: ""
-
-            if (myUsername.isBlank() && myUserId.isBlank()) {
-                return
-            }
-
-            // جلب الرسائل
-            val allMessages = SupabaseManager.postgrest["messages"]
-                .select()
-                .decodeList<RemoteMessage>()
-
-            // فلترة الرسائل: إظهار المحادثات التي يكون اسم المستخدم الحالي جزءاً من معرفها فقط
-            val myMessages = allMessages.filter { msg ->
-                val chatId = msg.chat_id.lowercase()
-                chatId.contains("__") && (
-                    (myUsername.isNotBlank() && (chatId.startsWith("${myUsername}__") || chatId.endsWith("__${myUsername}"))) ||
-                    (myUserId.isNotBlank() && (chatId.startsWith("${myUserId}__") || chatId.endsWith("__${myUserId}")))
-                )
-            }
-
-            val chatMap = mutableMapOf<String, RemoteMessage>()
-            for (msg in myMessages) {
-                chatMap[msg.chat_id] = msg
-            }
-
-            if (chatMap.isNotEmpty()) {
-                val list = chatMap.map { (chatId, lastMsg) ->
-                    // استخراج اسم الطرف الآخر حصراً
-                    val parts = chatId.split("__")
-                    val otherUsername = parts.firstOrNull { it != myUsername && it != myUserId } ?: "محادثة خاصة"
-
-                    Chat(
-                        id = otherUsername,
-                        name = otherUsername,
-                        lastMessage = lastMsg.text,
-                        lastMessageTime = lastMsg.created_at ?: "",
-                        avatarUrl = "",
-                        unreadCount = 0
-                    )
-                }
-                _chats.value = list
-            } else {
-                _chats.value = emptyList()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 }
