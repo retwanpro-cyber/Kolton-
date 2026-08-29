@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.radwan.nova.data.models.Message
 import com.radwan.nova.data.remote.SupabaseManager
 import com.radwan.nova.data.remote.RemoteMessage
+import com.radwan.nova.data.remote.RemoteProfile
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.delay
@@ -26,52 +27,78 @@ class ChatViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private var activeChatId: String? = null
+    private val _otherUserOnline = MutableStateFlow(false)
+    val otherUserOnline: StateFlow<Boolean> = _otherUserOnline.asStateFlow()
 
-    // تنظيف وتوحيد معرف الغرفة المشتركة بين أي طرفين
-    private fun getPrivateChatId(rawInput: String): String {
-        val user = SupabaseManager.auth.currentUserOrNull()
-        val myName = (user?.email?.substringBefore("@") ?: user?.id ?: "user").trim().lowercase()
-        val target = rawInput.trim().lowercase()
+    private var activeRoomId: String? = null
+    private var targetOtherId: String? = null
 
-        // إذا كانت الغرفة مدمجة مسبقاً (مثلاً: user1__user2)
-        if (target.contains("__")) {
-            val parts = target.split("__").map { it.trim() }.sorted()
-            return "${parts[0]}__${parts[1]}"
-        }
-
-        // دمج الاسمين ترتيباً أبجدياً لتطابق الغرفة عند كلا الطرفين 100%
-        return if (myName < target) {
-            "${myName}__${target}"
-        } else {
-            "${target}__${myName}"
-        }
+    // توليد معرف موحد وصارم بين أي مستخدمين بالترتيب الأبجدي لمعرفاتهم
+    fun generateRoomId(userA: String, userB: String): String {
+        val a = userA.trim().lowercase()
+        val b = userB.trim().lowercase()
+        return if (a < b) "${a}__${b}" else "${b}__${a}"
     }
 
-    fun loadMessages(chatId: String) {
-        if (chatId.isBlank()) return
-        val targetRoom = getPrivateChatId(chatId)
-        activeChatId = targetRoom
+    fun loadMessages(otherUserIdOrRoom: String) {
+        if (otherUserIdOrRoom.isBlank()) return
+
+        val myId = SupabaseManager.auth.currentUserOrNull()?.id ?: ""
+        
+        // تحديد معرف الغرفة الحقيقي ومعرف الطرف الآخر
+        val roomId = if (otherUserIdOrRoom.contains("__")) {
+            val parts = otherUserIdOrRoom.split("__")
+            targetOtherId = parts.firstOrNull { it != myId } ?: parts[0]
+            otherUserIdOrRoom
+        } else {
+            targetOtherId = otherUserIdOrRoom
+            if (myId.isNotBlank()) generateRoomId(myId, otherUserIdOrRoom) else otherUserIdOrRoom
+        }
+
+        activeRoomId = roomId
 
         viewModelScope.launch {
             _isLoading.value = true
-            fetchMessages(targetRoom)
+            fetchMessages(roomId)
+            checkOtherUserStatus()
             _isLoading.value = false
 
-            // مزامنة حية كل ثانية لجلب أي رسالة يرسلها الطرف الآخر فوراً
-            while (isActive && activeChatId == targetRoom) {
+            // مزامنة حية كل 1.5 ثانية للرسائل وحالة الاتصال
+            while (isActive && activeRoomId == roomId) {
                 delay(1500)
-                fetchMessages(targetRoom)
+                fetchMessages(roomId)
+                checkOtherUserStatus()
             }
         }
     }
 
-    private suspend fun fetchMessages(targetRoom: String) {
+    private suspend fun checkOtherUserStatus() {
+        val otherId = targetOtherId ?: return
+        try {
+            val profile = SupabaseManager.postgrest["profiles"]
+                .select {
+                    filter {
+                        or {
+                            eq("id", otherId)
+                            eq("username", otherId)
+                            eq("email", otherId)
+                        }
+                    }
+                }
+                .decodeSingleOrNull<RemoteProfile>()
+            
+            _otherUserOnline.value = profile?.is_online == true
+        } catch (e: Exception) {
+            _otherUserOnline.value = false
+        }
+    }
+
+    private suspend fun fetchMessages(roomId: String) {
         try {
             val remoteList = SupabaseManager.postgrest["messages"]
                 .select {
                     filter {
-                        eq("chat_id", targetRoom)
+                        eq("chat_id", roomId)
                     }
                 }
                 .decodeList<RemoteMessage>()
@@ -92,22 +119,27 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun sendMessage(chatId: String, text: String) {
-        if (text.isBlank() || chatId.isBlank()) return
+    fun sendMessage(otherUserIdOrRoom: String, text: String) {
+        if (text.isBlank() || otherUserIdOrRoom.isBlank()) return
 
-        val targetRoom = getPrivateChatId(chatId)
-        val user = SupabaseManager.auth.currentUserOrNull()
-        val currentUserId = user?.id ?: "guest"
-        val currentUserName = user?.email?.substringBefore("@") ?: "مستخدم"
-            
+        val myUser = SupabaseManager.auth.currentUserOrNull()
+        val myId = myUser?.id ?: "guest"
+        val myName = myUser?.email?.substringBefore("@") ?: "مستخدم"
+
+        val roomId = if (otherUserIdOrRoom.contains("__")) {
+            otherUserIdOrRoom
+        } else {
+            generateRoomId(myId, otherUserIdOrRoom)
+        }
+
         val newMsgId = UUID.randomUUID().toString()
         val currentTimeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
 
         val newMsg = Message(
             id = newMsgId,
-            chatId = targetRoom,
-            senderId = currentUserId,
-            senderName = currentUserName,
+            chatId = roomId,
+            senderId = myId,
+            senderName = myName,
             text = text.trim(),
             timestamp = currentTimeStr
         )
@@ -118,10 +150,10 @@ class ChatViewModel : ViewModel() {
             try {
                 val remote = RemoteMessage(
                     id = newMsgId,
-                    chat_id = targetRoom,
-                    sender_id = currentUserId,
+                    chat_id = roomId,
+                    sender_id = myId,
                     text = text.trim(),
-                    sender_name = currentUserName
+                    sender_name = myName
                 )
                 SupabaseManager.postgrest["messages"].insert(remote)
             } catch (e: Exception) {
