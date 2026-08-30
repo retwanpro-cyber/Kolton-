@@ -1,7 +1,16 @@
 package com.radwan.nova.ui.screens.chat
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -10,8 +19,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -53,16 +78,16 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Column {
-                        androidx.compose.material3.Text(
+                        Text(
                             text = chatTitle,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
-                        androidx.compose.material3.Text(
+                        Text(
                             text = if (isOtherOnline) "متصل الآن" else "غير متصل",
                             fontSize = 11.sp,
-                            color = if (isOtherOnline) Color(0xFF10B981) else Color.Gray
+                            color = if (isOtherOnline) Color(0xFF10B981) else Color.LightGray
                         )
                     }
                 },
@@ -111,16 +136,16 @@ fun ChatScreen(
                             modifier = Modifier.widthIn(max = 280.dp)
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                androidx.compose.material3.Text(
+                                Text(
                                     text = msg.text,
-                                    fontSize = 15.sp,
-                                    color = Color.White
+                                    color = Color.White,
+                                    fontSize = 15.sp
                                 )
                                 if (msg.timestamp.isNotBlank()) {
-                                    androidx.compose.material3.Text(
+                                    Text(
                                         text = msg.timestamp.takeLast(8),
+                                        color = Color.LightGray,
                                         fontSize = 10.sp,
-                                        color = Color(0x99FFFFFF),
                                         modifier = Modifier.align(Alignment.End)
                                     )
                                 }
@@ -144,7 +169,7 @@ fun ChatScreen(
                         value = messageText,
                         onValueChange = { messageText = it },
                         placeholder = { 
-                            androidx.compose.material3.Text(
+                            Text(
                                 text = "اكتب رسالة...", 
                                 color = Color.Gray
                             ) 
