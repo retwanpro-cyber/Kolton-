@@ -113,7 +113,7 @@ fun ChatScreen(
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 Text(
-                                    text = msg.text,
+                                    text = msg.text.toString(),
                                     color = Color.White,
                                     fontSize = 15.sp
                                 )
@@ -131,7 +131,7 @@ fun ChatScreen(
                 }
             }
 
-            // شريط كتابة الرسالة
+            // شريط إدخال الرسائل
             Surface(
                 color = Color(0xFF1E293B),
                 modifier = Modifier.fillMaxWidth()
@@ -145,7 +145,7 @@ fun ChatScreen(
                     TextField(
                         value = messageText,
                         onValueChange = { messageText = it },
-                        placeholder = { Text("اكتب رسالة...", color = Color.Gray) },
+                        placeholder = { Text(text = "اكتب رسالة...", color = Color.Gray) },
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color(0xFF0F172A),
