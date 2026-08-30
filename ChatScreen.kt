@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.radwan.nova.data.remote.SupabaseManager
 import com.radwan.nova.viewmodel.ChatViewModel
-import io.github.jan.supabase.gotrue.auth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,13 +53,13 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(
+                        androidx.compose.material3.Text(
                             text = chatTitle,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
-                        Text(
+                        androidx.compose.material3.Text(
                             text = if (isOtherOnline) "متصل الآن" else "غير متصل",
                             fontSize = 11.sp,
                             color = if (isOtherOnline) Color(0xFF10B981) else Color.Gray
@@ -112,16 +111,16 @@ fun ChatScreen(
                             modifier = Modifier.widthIn(max = 280.dp)
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = msg.text.toString(),
-                                    color = Color.White,
-                                    fontSize = 15.sp
+                                androidx.compose.material3.Text(
+                                    text = msg.text,
+                                    fontSize = 15.sp,
+                                    color = Color.White
                                 )
                                 if (msg.timestamp.isNotBlank()) {
-                                    Text(
+                                    androidx.compose.material3.Text(
                                         text = msg.timestamp.takeLast(8),
-                                        color = Color.White.copy(alpha = 0.6f),
                                         fontSize = 10.sp,
+                                        color = Color(0x99FFFFFF),
                                         modifier = Modifier.align(Alignment.End)
                                     )
                                 }
@@ -131,7 +130,6 @@ fun ChatScreen(
                 }
             }
 
-            // شريط إدخال الرسائل
             Surface(
                 color = Color(0xFF1E293B),
                 modifier = Modifier.fillMaxWidth()
@@ -145,7 +143,12 @@ fun ChatScreen(
                     TextField(
                         value = messageText,
                         onValueChange = { messageText = it },
-                        placeholder = { Text(text = "اكتب رسالة...", color = Color.Gray) },
+                        placeholder = { 
+                            androidx.compose.material3.Text(
+                                text = "اكتب رسالة...", 
+                                color = Color.Gray
+                            ) 
+                        },
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color(0xFF0F172A),
