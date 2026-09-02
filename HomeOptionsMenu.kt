@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -34,7 +35,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 
 @Composable
-fun HomeOptionsMenu() {
+fun HomeOptionsMenu(
+    onSettingsClick: () -> Unit = {}
+) {
     var expanded by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
 
@@ -52,6 +55,27 @@ fun HomeOptionsMenu() {
             onDismissRequest = { expanded = false },
             modifier = Modifier.background(Color(0xFF1E293B))
         ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "الإعدادات",
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = Color(0xFF60A5FA)
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onSettingsClick()
+                }
+            )
+
             DropdownMenuItem(
                 text = {
                     Text(
