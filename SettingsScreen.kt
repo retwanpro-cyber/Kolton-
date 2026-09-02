@@ -1,10 +1,8 @@
 package com.radwan.nova.ui.screens.settings
 
 import android.app.Activity
-import android.content.Context
 import android.content.res.Configuration
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,8 +40,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -70,7 +66,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.core.os.LocaleListCompat
 import coil.compose.AsyncImage
 import com.radwan.nova.data.remote.RemoteProfile
 import com.radwan.nova.data.remote.SupabaseManager
@@ -93,7 +88,7 @@ fun SettingsScreen(
 
     // حالة نافذة اختيار اللغة
     var showLanguageDialog by remember { mutableStateOf(false) }
-    val currentAppLocale = AppCompatDelegate.getApplicationLocales()[0]?.language ?: Locale.getDefault().language
+    val currentAppLocale = Locale.getDefault().language
     var selectedLanguage by remember { mutableStateOf(currentAppLocale) }
 
     // حالات نافذة تعديل الملف الشخصي
@@ -132,25 +127,22 @@ fun SettingsScreen(
     }
 
     fun changeAppLanguage(langCode: String) {
-        val appLocale = LocaleListCompat.forLanguageTags(langCode)
-        AppCompatDelegate.setApplicationLocales(appLocale)
-        
-        // تحديث إعدادات الـ Configuration فورياً
         val locale = Locale(langCode)
         Locale.setDefault(locale)
-        val config = Configuration(context.resources.configuration)
+        val resources = context.resources
+        val config = Configuration(resources.configuration)
         config.setLocale(locale)
         config.setLayoutDirection(locale)
-        context.resources.updateConfiguration(config, context.resources.displayMetrics)
+        resources.updateConfiguration(config, resources.displayMetrics)
 
         if (context is Activity) {
             context.recreate()
         }
     }
 
-    val currentLanguageTitle = when (selectedLanguage) {
-        "ar" -> "العربية (Arabic)"
-        "fr" -> "Français (الفرنسية)"
+    val currentLanguageTitle = when {
+        selectedLanguage.startsWith("ar") -> "العربية (Arabic)"
+        selectedLanguage.startsWith("fr") -> "Français (الفرنسية)"
         else -> "English (الإنجليزية)"
     }
 
