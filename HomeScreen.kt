@@ -1,6 +1,5 @@
 package com.radwan.nova.ui.screens.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,7 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.radwan.nova.data.remote.ProfileDto
+import com.radwan.nova.data.models.Chat
+import com.radwan.nova.data.remote.RemoteProfile
 import com.radwan.nova.data.remote.SupabaseManager
 import com.radwan.nova.ui.components.HomeOptionsMenu
 import com.radwan.nova.viewmodel.HomeViewModel
@@ -72,7 +72,7 @@ fun HomeScreen(
     val chats by viewModel.chats.collectAsState()
     var showNewChatDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val availableUsers = remember { mutableStateListOf<ProfileDto>() }
+    val availableUsers = remember { mutableStateListOf<RemoteProfile>() }
     var isSearching by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -94,7 +94,7 @@ fun HomeScreen(
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
                     }
                     HomeOptionsMenu()
-                    IconButton(onClick = { viewModel.logout { onLogoutClick(); onLogout() } }) {
+                    IconButton(onClick = { viewModel.logout { onLogout(); onLogoutClick() } }) {
                         Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color(0xFFEF4444))
                     }
                 },
@@ -111,7 +111,7 @@ fun HomeScreen(
                             val myId = SupabaseManager.auth.currentUserOrNull()?.id
                             val profiles = SupabaseManager.postgrest.from("profiles")
                                 .select()
-                                .decodeList<ProfileDto>()
+                                .decodeList<RemoteProfile>()
                             availableUsers.clear()
                             availableUsers.addAll(profiles.filter { it.id != myId })
                         } catch (e: Exception) {
@@ -153,13 +153,12 @@ fun HomeScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(chats) { chat ->
+                    items(chats) { (id, name, _, lastMessage) ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    val cId = if (chat.id.contains("_")) chat.id else chat.participantId
-                                    onChatClick(cId, chat.name)
+                                    onChatClick(id, name)
                                 },
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
@@ -185,14 +184,14 @@ fun HomeScreen(
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = chat.name,
+                                        text = name,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
                                         color = Color.White
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = if (chat.lastMessage.isNotBlank()) chat.lastMessage else "انقر لفتح المحادثة والدردشة",
+                                        text = if (lastMessage.isNotBlank()) lastMessage else "انقر لفتح المحادثة والدردشة",
                                         fontSize = 13.sp,
                                         color = Color(0xFF94A3B8),
                                         maxLines = 1
@@ -245,8 +244,7 @@ fun HomeScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(availableUsers) { user ->
-                                val displayName = user.fullName ?: user.username ?: "مستخدم"
-                                val displayUser = user.username ?: ""
+                                val displayName = if (user.full_name.isNotBlank()) user.full_name else if (user.name.isNotBlank()) user.name else user.username
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -283,9 +281,9 @@ fun HomeScreen(
                                                 color = Color.White,
                                                 fontSize = 15.sp
                                             )
-                                            if (displayUser.isNotBlank()) {
+                                            if (user.username.isNotBlank()) {
                                                 Text(
-                                                    text = "@$displayUser",
+                                                    text = "@${user.username}",
                                                     color = Color.Gray,
                                                     fontSize = 12.sp
                                                 )
