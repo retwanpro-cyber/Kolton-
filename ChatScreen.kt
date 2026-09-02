@@ -137,7 +137,7 @@ fun ChatScreen(
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 Text(
-                                    text = msg.text,
+                                    text = msg.text ?: "",
                                     color = Color.White,
                                     fontSize = 15.sp
                                 )
@@ -168,7 +168,6 @@ fun ChatScreen(
                     TextField(
                         value = messageText,
                         onValueChange = { messageText = it },
-                        placeholder = null,
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color(0xFF0F172A),
