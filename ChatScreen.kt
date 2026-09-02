@@ -168,7 +168,9 @@ fun ChatScreen(
                     TextField(
                         value = messageText,
                         onValueChange = { messageText = it },
-                        placeholder = { Text(text = "اكتب رسالة...", color = Color.Gray) },
+                        placeholder = { 
+                            Text(text = "اكتب رسالة...", color = Color.Gray, fontSize = 14.sp) 
+                        },
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color(0xFF0F172A),
