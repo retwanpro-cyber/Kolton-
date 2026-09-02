@@ -31,19 +31,17 @@ object ChatBackgroundWatcher {
                             .select()
                             .decodeList<RemoteMessage>()
 
-                        // تصفية الرسائل التي وصلت للمستخدم الحالي ولم يرسلها هو
+                        // تصفية الرسائل الموجهة لحسابي والمرسلة من شخص آخر
                         val incoming = messages.filter { msg ->
-                            val isForMe = msg.chat_id?.contains(myId) == true || msg.receiver_id == myId
+                            val isForMe = msg.chat_id?.contains(myId) == true
                             val notMine = msg.sender_id != myId
                             isForMe && notMine
                         }
 
                         if (lastSeenTimestamp.isBlank()) {
-                            // أول تشغيل نحفظ أحدث توقيت لعدم تكرار الإشعارات القديمة
                             lastSeenTimestamp = incoming.lastOrNull()?.created_at ?: System.currentTimeMillis().toString()
                             prefs.edit().putString("last_msg_time", lastSeenTimestamp).apply()
                         } else {
-                            // البحث عن أي رسائل جديدة بعد التوقيت الأخير
                             val newMessages = incoming.filter {
                                 (it.created_at ?: "") > lastSeenTimestamp
                             }
@@ -65,9 +63,9 @@ object ChatBackgroundWatcher {
                         }
                     }
                 } catch (e: Exception) {
-                    // في حال انقطاع النت يتم المحاولة بعد قليل بهدوء
+                    // في حال انقطاع مؤقت للإنترنت
                 }
-                delay(3000) // فحص دوري كل 3 ثوانٍ
+                delay(3000)
             }
         }
     }
