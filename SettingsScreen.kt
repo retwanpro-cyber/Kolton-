@@ -1,6 +1,6 @@
 package com.radwan.nova.ui.screens.settings
 
-import androidx.compose.foundation.background
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DarkMode
@@ -25,16 +26,22 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -42,18 +49,25 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.radwan.nova.data.remote.RemoteProfile
 import com.radwan.nova.data.remote.SupabaseManager
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.from
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,11 +75,21 @@ fun SettingsScreen(
     onBackClick: () -> Unit = {},
     onProfileClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var userProfile by remember { mutableStateOf<RemoteProfile?>(null) }
     var notificationsEnabled by remember { mutableStateOf(true) }
     var darkModeEnabled by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
+    // حالات نافذة تعديل الملف الشخصي
+    var showEditProfileDialog by remember { mutableStateOf(false) }
+    var editName by remember { mutableStateOf("") }
+    var editUsername by remember { mutableStateOf("") }
+    var editBio by remember { mutableStateOf("") }
+    var editAvatarUrl by remember { mutableStateOf("") }
+    var isSaving by remember { mutableStateOf(false) }
+
+    suspend fun loadUserProfile() {
         try {
             val myId = SupabaseManager.auth.currentUserOrNull()?.id
             if (myId != null) {
@@ -76,10 +100,20 @@ fun SettingsScreen(
                         }
                     }.decodeSingleOrNull<RemoteProfile>()
                 userProfile = profile
+                if (profile != null) {
+                    editName = profile.full_name.ifBlank { profile.name }
+                    editUsername = profile.username
+                    editBio = profile.bio ?: ""
+                    editAvatarUrl = profile.avatar_url ?: ""
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    LaunchedEffect(Unit) {
+        loadUserProfile()
     }
 
     Scaffold(
@@ -122,7 +156,10 @@ fun SettingsScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onProfileClick() },
+                        .clickable {
+                            showEditProfileDialog = true
+                            onProfileClick()
+                        },
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
                 ) {
@@ -137,12 +174,21 @@ fun SettingsScreen(
                             shape = CircleShape,
                             color = Color(0xFF2563EB)
                         ) {
-                            Icon(
-                                Icons.Default.Person,
-                                contentDescription = "Avatar",
-                                tint = Color.White,
-                                modifier = Modifier.padding(12.dp)
-                            )
+                            if (!userProfile?.avatar_url.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = userProfile?.avatar_url,
+                                    contentDescription = "Avatar",
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = "Avatar",
+                                    tint = Color.White,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.width(16.dp))
@@ -179,7 +225,7 @@ fun SettingsScreen(
                         Icon(
                             Icons.Default.Edit,
                             contentDescription = "Edit Profile",
-                            tint = Color(0xFF64748B),
+                            tint = Color(0xFF60A5FA),
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -225,6 +271,192 @@ fun SettingsScreen(
                             icon = Icons.Default.Storage,
                             title = "التخزين والبيانات المؤقتة"
                         )
+                    }
+                }
+            }
+        }
+    }
+
+    // 🌟 نافذة تعديل الملف الشخصي (الاسم، اسم المستخدم، الصورة، والحالة)
+    if (showEditProfileDialog) {
+        Dialog(onDismissRequest = { if (!isSaving) showEditProfileDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFF1E293B),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "تعديل الملف الشخصي",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // معاينة الصورة الحالية
+                    Surface(
+                        modifier = Modifier.size(72.dp),
+                        shape = CircleShape,
+                        color = Color(0xFF2563EB)
+                    ) {
+                        if (editAvatarUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = editAvatarUrl,
+                                contentDescription = "Avatar Preview",
+                                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // حقل الاسم
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text("الاسم الكامل", color = Color(0xFF94A3B8)) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF2563EB),
+                            unfocusedBorderColor = Color(0xFF475569),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // حقل اسم المستخدم
+                    OutlinedTextField(
+                        value = editUsername,
+                        onValueChange = { editUsername = it },
+                        label = { Text("اسم المستخدم (Username)", color = Color(0xFF94A3B8)) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF2563EB),
+                            unfocusedBorderColor = Color(0xFF475569),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // حقل رابط الصورة الشخصية
+                    OutlinedTextField(
+                        value = editAvatarUrl,
+                        onValueChange = { editAvatarUrl = it },
+                        label = { Text("رابط الصورة الشخصية (URL)", color = Color(0xFF94A3B8)) },
+                        placeholder = { Text("https://example.com/avatar.jpg", color = Color.DarkGray) },
+                        singleLine = true,
+                        trailingIcon = {
+                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = Color(0xFF60A5FA))
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF2563EB),
+                            unfocusedBorderColor = Color(0xFF475569),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // حقل النبذة التعريفية (Bio)
+                    OutlinedTextField(
+                        value = editBio,
+                        onValueChange = { editBio = it },
+                        label = { Text("الحالة / النبذة التعريفية", color = Color(0xFF94A3B8)) },
+                        maxLines = 2,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF2563EB),
+                            unfocusedBorderColor = Color(0xFF475569),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { showEditProfileDialog = false },
+                            enabled = !isSaving
+                        ) {
+                            Text("إلغاء", color = Color(0xFF94A3B8))
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Button(
+                            onClick = {
+                                val myId = SupabaseManager.auth.currentUserOrNull()?.id
+                                if (myId != null) {
+                                    scope.launch {
+                                        isSaving = true
+                                        try {
+                                            SupabaseManager.postgrest.from("profiles").update(
+                                                mapOf(
+                                                    "full_name" to editName,
+                                                    "name" to editName,
+                                                    "username" to editUsername,
+                                                    "bio" to editBio,
+                                                    "avatar_url" to editAvatarUrl
+                                                )
+                                            ) {
+                                                filter {
+                                                    eq("id", myId)
+                                                }
+                                            }
+                                            Toast.makeText(context, "تم حفظ البيانات بنجاح!", Toast.LENGTH_SHORT).show()
+                                            loadUserProfile()
+                                            showEditProfileDialog = false
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                            Toast.makeText(context, "خطأ أثناء الحفظ: ${e.message}", Toast.LENGTH_LONG).show()
+                                        } finally {
+                                            isSaving = false
+                                        }
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                            shape = RoundedCornerShape(10.dp),
+                            enabled = !isSaving
+                        ) {
+                            if (isSaving) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("حفظ التغييرات", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
