@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +51,7 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(Unit) {
                         val hasLoggedIn = prefs.getBoolean("is_logged_in", false)
                         val currentUser = SupabaseManager.auth.currentUserOrNull()
-                        
+
                         initialRoute = if (hasLoggedIn || currentUser != null) {
                             "home"
                         } else {
@@ -89,7 +90,7 @@ class MainActivity : ComponentActivity() {
 
                             composable("home") {
                                 HomeScreen(
-                                    onChatClick = { chatId, title ->
+                                    onChatClick = { chatId: String, title: String ->
                                         navController.navigate("chat/$chatId/$title")
                                     },
                                     onSettingsClick = {
@@ -110,7 +111,7 @@ class MainActivity : ComponentActivity() {
                                         navController.popBackStack()
                                     },
                                     onProfileClick = {
-                                        /* فتح تعديل الملف الشخصي */
+                                        /* تعديل الملف الشخصي */
                                     }
                                 )
                             }
