@@ -65,6 +65,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(
     onChatClick: (String, String) -> Unit = { _, _ -> },
+    onSettingsClick: () -> Unit = {},
     onLogout: () -> Unit = {},
     onLogoutClick: () -> Unit = onLogout,
     viewModel: HomeViewModel = viewModel()
@@ -93,7 +94,7 @@ fun HomeScreen(
                     IconButton(onClick = { viewModel.fetchRemoteChats() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
                     }
-                    HomeOptionsMenu()
+                    HomeOptionsMenu(onSettingsClick = onSettingsClick)
                     IconButton(onClick = { viewModel.logout { onLogout(); onLogoutClick() } }) {
                         Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color(0xFFEF4444))
                     }
