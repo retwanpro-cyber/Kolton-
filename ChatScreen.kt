@@ -141,9 +141,9 @@ fun ChatScreen(
                                     color = Color.White,
                                     fontSize = 15.sp
                                 )
-                                if (msg.timestamp.isNotBlank()) {
+                                if (!msg.timestamp.isNullOrBlank()) {
                                     Text(
-                                        text = msg.timestamp.takeLast(8),
+                                        text = msg.timestamp.orEmpty().takeLast(8),
                                         color = Color.LightGray,
                                         fontSize = 10.sp,
                                         modifier = Modifier.align(Alignment.End)
@@ -168,6 +168,7 @@ fun ChatScreen(
                     TextField(
                         value = messageText,
                         onValueChange = { messageText = it },
+                        placeholder = { Text(text = "اكتب رسالة...") },
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color(0xFF0F172A),
