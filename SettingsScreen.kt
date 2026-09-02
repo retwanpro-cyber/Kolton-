@@ -1,7 +1,5 @@
 package com.radwan.nova.ui.screens.settings
 
-import android.app.Activity
-import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -67,12 +65,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.radwan.nova.data.local.LanguageManager
 import com.radwan.nova.data.remote.RemoteProfile
 import com.radwan.nova.data.remote.SupabaseManager
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,12 +84,8 @@ fun SettingsScreen(
     var notificationsEnabled by remember { mutableStateOf(true) }
     var darkModeEnabled by remember { mutableStateOf(true) }
 
-    // حالة نافذة اختيار اللغة
     var showLanguageDialog by remember { mutableStateOf(false) }
-    val currentAppLocale = Locale.getDefault().language
-    var selectedLanguage by remember { mutableStateOf(currentAppLocale) }
 
-    // حالات نافذة تعديل الملف الشخصي
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var editName by remember { mutableStateOf("") }
     var editUsername by remember { mutableStateOf("") }
@@ -123,27 +117,14 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(Unit) {
+        LanguageManager.init(context)
         loadUserProfile()
     }
 
-    fun changeAppLanguage(langCode: String) {
-        val locale = Locale(langCode)
-        Locale.setDefault(locale)
-        val resources = context.resources
-        val config = Configuration(resources.configuration)
-        config.setLocale(locale)
-        config.setLayoutDirection(locale)
-        resources.updateConfiguration(config, resources.displayMetrics)
-
-        if (context is Activity) {
-            context.recreate()
-        }
-    }
-
-    val currentLanguageTitle = when {
-        selectedLanguage.startsWith("ar") -> "العربية (Arabic)"
-        selectedLanguage.startsWith("fr") -> "Français (الفرنسية)"
-        else -> "English (الإنجليزية)"
+    val currentLangTitle = when (LanguageManager.currentLanguage) {
+        "ar" -> "العربية (Arabic)"
+        "fr" -> "Français (French)"
+        else -> "English"
     }
 
     Scaffold(
@@ -151,7 +132,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "الإعدادات",
+                        text = LanguageManager.getString("settings_title"),
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -173,10 +154,9 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1️⃣ كارت الملف الشخصي في أعلى الواجهة
             item {
                 Text(
-                    text = "الملف الشخصي",
+                    text = LanguageManager.getString("profile_section"),
                     color = Color(0xFF94A3B8),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -226,7 +206,7 @@ fun SettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             val name = userProfile?.full_name?.takeIf { it.isNotBlank() }
                                 ?: userProfile?.name?.takeIf { it.isNotBlank() }
-                                ?: "مستخدم NOVA"
+                                ?: "NOVA User"
                             val username = userProfile?.username?.takeIf { it.isNotBlank() } ?: "user"
 
                             Text(
@@ -262,10 +242,9 @@ fun SettingsScreen(
                 }
             }
 
-            // 2️⃣ خيارات عامة للتطبيق
             item {
                 Text(
-                    text = "التفضيلات والخصوصية",
+                    text = LanguageManager.getString("preferences_section"),
                     color = Color(0xFF94A3B8),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -278,37 +257,35 @@ fun SettingsScreen(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        
-                        // 🌐 خيار تغيير اللغة
                         SettingsClickItem(
                             icon = Icons.Default.Language,
-                            title = "لغة التطبيق (Language)",
-                            subtitle = currentLanguageTitle,
+                            title = LanguageManager.getString("language_title"),
+                            subtitle = currentLangTitle,
                             onClick = { showLanguageDialog = true }
                         )
 
                         SettingsToggleItem(
                             icon = Icons.Default.Notifications,
-                            title = "الإشعارات التنبيهية",
+                            title = LanguageManager.getString("notifications_title"),
                             checked = notificationsEnabled,
                             onCheckedChange = { notificationsEnabled = it }
                         )
 
                         SettingsToggleItem(
                             icon = Icons.Default.DarkMode,
-                            title = "الوضع الليلي الفاخر",
+                            title = LanguageManager.getString("dark_mode_title"),
                             checked = darkModeEnabled,
                             onCheckedChange = { darkModeEnabled = it }
                         )
 
                         SettingsClickItem(
                             icon = Icons.Default.Lock,
-                            title = "الخصوصية والأمان والتشفير"
+                            title = LanguageManager.getString("privacy_title")
                         )
 
                         SettingsClickItem(
                             icon = Icons.Default.Storage,
-                            title = "التخزين والبيانات المؤقتة"
+                            title = LanguageManager.getString("storage_title")
                         )
                     }
                 }
@@ -316,7 +293,6 @@ fun SettingsScreen(
         }
     }
 
-    // 🌐 نافذة اختيار اللغة (العربية / English / Français)
     if (showLanguageDialog) {
         Dialog(onDismissRequest = { showLanguageDialog = false }) {
             Surface(
@@ -330,7 +306,7 @@ fun SettingsScreen(
                     modifier = Modifier.padding(20.dp)
                 ) {
                     Text(
-                        text = "اختر لغة التطبيق",
+                        text = LanguageManager.getString("select_language"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         color = Color.White
@@ -345,16 +321,14 @@ fun SettingsScreen(
                     )
 
                     languages.forEach { (code, name, flag) ->
-                        val isSelected = selectedLanguage.startsWith(code)
+                        val isSelected = LanguageManager.currentLanguage == code
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
                                 .clickable {
-                                    selectedLanguage = code
+                                    LanguageManager.setLanguage(context, code)
                                     showLanguageDialog = false
-                                    changeAppLanguage(code)
-                                    Toast.makeText(context, "تم تغيير اللغة إلى $name", Toast.LENGTH_SHORT).show()
                                 },
                             shape = RoundedCornerShape(12.dp),
                             color = if (isSelected) Color(0xFF2563EB).copy(alpha = 0.2f) else Color.Transparent
@@ -392,14 +366,13 @@ fun SettingsScreen(
                         onClick = { showLanguageDialog = false },
                         modifier = Modifier.align(Alignment.End)
                     ) {
-                        Text("إغلاق", color = Color(0xFF94A3B8))
+                        Text(LanguageManager.getString("close"), color = Color(0xFF94A3B8))
                     }
                 }
             }
         }
     }
 
-    // 🌟 نافذة تعديل الملف الشخصي
     if (showEditProfileDialog) {
         Dialog(onDismissRequest = { if (!isSaving) showEditProfileDialog = false }) {
             Surface(
@@ -414,7 +387,7 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "تعديل الملف الشخصي",
+                        text = LanguageManager.getString("edit_profile"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         color = Color.White
@@ -422,7 +395,6 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // معاينة الصورة الحالية
                     Surface(
                         modifier = Modifier.size(72.dp),
                         shape = CircleShape,
@@ -447,11 +419,10 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // حقل الاسم
                     OutlinedTextField(
                         value = editName,
                         onValueChange = { editName = it },
-                        label = { Text("الاسم الكامل", color = Color(0xFF94A3B8)) },
+                        label = { Text(LanguageManager.getString("full_name_label"), color = Color(0xFF94A3B8)) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF2563EB),
@@ -464,11 +435,10 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // حقل اسم المستخدم
                     OutlinedTextField(
                         value = editUsername,
                         onValueChange = { editUsername = it },
-                        label = { Text("اسم المستخدم (Username)", color = Color(0xFF94A3B8)) },
+                        label = { Text(LanguageManager.getString("username_label"), color = Color(0xFF94A3B8)) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF2563EB),
@@ -481,11 +451,10 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // حقل رابط الصورة الشخصية
                     OutlinedTextField(
                         value = editAvatarUrl,
                         onValueChange = { editAvatarUrl = it },
-                        label = { Text("رابط الصورة الشخصية (URL)", color = Color(0xFF94A3B8)) },
+                        label = { Text(LanguageManager.getString("avatar_url_label"), color = Color(0xFF94A3B8)) },
                         placeholder = { Text("https://example.com/avatar.jpg", color = Color.DarkGray) },
                         singleLine = true,
                         trailingIcon = {
@@ -502,11 +471,10 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // حقل النبذة التعريفية (Bio)
                     OutlinedTextField(
                         value = editBio,
                         onValueChange = { editBio = it },
-                        label = { Text("الحالة / النبذة التعريفية", color = Color(0xFF94A3B8)) },
+                        label = { Text(LanguageManager.getString("bio_label"), color = Color(0xFF94A3B8)) },
                         maxLines = 2,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF2563EB),
@@ -528,7 +496,7 @@ fun SettingsScreen(
                             onClick = { showEditProfileDialog = false },
                             enabled = !isSaving
                         ) {
-                            Text("إلغاء", color = Color(0xFF94A3B8))
+                            Text(LanguageManager.getString("cancel"), color = Color(0xFF94A3B8))
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
@@ -551,12 +519,11 @@ fun SettingsScreen(
                                                     eq("id", myId)
                                                 }
                                             }
-                                            Toast.makeText(context, "تم حفظ البيانات بنجاح!", Toast.LENGTH_SHORT).show()
                                             loadUserProfile()
                                             showEditProfileDialog = false
                                         } catch (e: Exception) {
                                             e.printStackTrace()
-                                            Toast.makeText(context, "خطأ أثناء الحفظ: ${e.message}", Toast.LENGTH_LONG).show()
+                                            Toast.makeText(context, "${e.message}", Toast.LENGTH_LONG).show()
                                         } finally {
                                             isSaving = false
                                         }
@@ -574,7 +541,7 @@ fun SettingsScreen(
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Text("حفظ التغييرات", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text(LanguageManager.getString("save_changes"), color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
