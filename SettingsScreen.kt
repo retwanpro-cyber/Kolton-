@@ -1,6 +1,8 @@
 package com.radwan.nova.ui.screens.settings
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,12 +27,14 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.EnhancedEncryption
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Wifi
@@ -366,6 +370,59 @@ fun SettingsScreen(
                             onClick = {
                                 cacheSizeText = getCacheSizeFormatted(context)
                                 showStorageDialog = true
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 3️⃣ تواصل مع المطور (Developer Contact)
+            item {
+                Text(
+                    text = "تواصل مع المطور",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 4.dp)
+                )
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        // خيار الإيميل
+                        SettingsClickItem(
+                            icon = Icons.Default.Email,
+                            title = "البريد الإلكتروني",
+                            subtitle = "retwan.tech@gmail.com",
+                            onClick = {
+                                try {
+                                    val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                                        data = Uri.parse("mailto:retwan.tech@gmail.com")
+                                        putExtra(Intent.EXTRA_SUBJECT, "NOVA Chat Support & Inquiry")
+                                    }
+                                    context.startActivity(emailIntent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "لم يتم العثور على تطبيق بريد", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+
+                        // خيار الفيسبوك
+                        SettingsClickItem(
+                            icon = Icons.Default.Public,
+                            title = "فيسبوك (Facebook)",
+                            subtitle = "Ridwan Almasouri",
+                            onClick = {
+                                try {
+                                    val fbUri = Uri.parse("https://www.facebook.com/ridwanalmasouri?mibextid=ZbWKwL")
+                                    val fbIntent = Intent(Intent.ACTION_VIEW, fbUri)
+                                    context.startActivity(fbIntent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "تعذر فتح الرابط", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                     }
