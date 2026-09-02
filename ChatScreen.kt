@@ -1,6 +1,5 @@
 package com.radwan.nova.ui.screens.chat
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.radwan.nova.data.remote.SupabaseManager
 import com.radwan.nova.viewmodel.ChatViewModel
+import io.github.jan.supabase.gotrue.auth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -168,12 +168,7 @@ fun ChatScreen(
                     TextField(
                         value = messageText,
                         onValueChange = { messageText = it },
-                        placeholder = { 
-                            Text(
-                                text = "اكتب رسالة...", 
-                                color = Color.Gray
-                            ) 
-                        },
+                        placeholder = { Text(text = "اكتب رسالة...", color = Color.Gray) },
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color(0xFF0F172A),
