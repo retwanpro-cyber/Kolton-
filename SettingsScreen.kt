@@ -418,15 +418,14 @@ fun SettingsScreen(
                                     scope.launch {
                                         isSaving = true
                                         try {
-                                            SupabaseManager.postgrest.from("profiles").update(
-                                                mapOf(
-                                                    "full_name" to editName,
-                                                    "name" to editName,
-                                                    "username" to editUsername,
-                                                    "bio" to editBio,
-                                                    "avatar_url" to editAvatarUrl
-                                                )
-                                            ) {
+                                            // تحديث فقط الحقول الموجودة في جدول profiles
+                                            val updates = mutableMapOf<String, Any>()
+                                            if (editName.isNotBlank()) updates["full_name"] = editName
+                                            if (editUsername.isNotBlank()) updates["username"] = editUsername
+                                            updates["bio"] = editBio
+                                            updates["avatar_url"] = editAvatarUrl
+
+                                            SupabaseManager.postgrest.from("profiles").update(updates) {
                                                 filter {
                                                     eq("id", myId)
                                                 }
