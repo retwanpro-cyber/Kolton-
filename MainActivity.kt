@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,10 +32,14 @@ import com.radwan.nova.ui.screens.home.HomeScreen
 import com.radwan.nova.ui.screens.settings.SettingsScreen
 import com.radwan.nova.ui.theme.NovaChatTheme
 import io.github.jan.supabase.gotrue.auth
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val prefs = getSharedPreferences("nova_auth_prefs", Context.MODE_PRIVATE)
+
         setContent {
             NovaChatTheme {
                 Surface(
@@ -44,20 +47,29 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
-                    val prefs = remember { getSharedPreferences("nova_auth_prefs", Context.MODE_PRIVATE) }
                     var isCheckingAuth by remember { mutableStateOf(true) }
-                    var initialRoute by remember { mutableStateOf("auth") }
+                    var startRoute by remember { mutableStateOf("auth") }
 
                     LaunchedEffect(Unit) {
-                        val hasLoggedIn = prefs.getBoolean("is_logged_in", false)
-                        val currentUser = SupabaseManager.auth.currentUserOrNull()
+                        try {
+                            var current = SupabaseManager.auth.currentUserOrNull()
+                            if (current == null) {
+                                delay(300)
+                                current = SupabaseManager.auth.currentUserOrNull()
+                            }
 
-                        initialRoute = if (hasLoggedIn || currentUser != null) {
-                            "home"
-                        } else {
-                            "auth"
+                            val localSaved = prefs.getString("saved_user_id", null)
+                            if (current != null || !localSaved.isNullOrBlank()) {
+                                startRoute = "home"
+                            } else {
+                                startRoute = "auth"
+                            }
+                        } catch (e: Exception) {
+                            val localSaved = prefs.getString("saved_user_id", null)
+                            startRoute = if (!localSaved.isNullOrBlank()) "home" else "auth"
+                        } finally {
+                            isCheckingAuth = false
                         }
-                        isCheckingAuth = false
                     }
 
                     if (isCheckingAuth) {
@@ -75,12 +87,13 @@ class MainActivity : ComponentActivity() {
                     } else {
                         NavHost(
                             navController = navController,
-                            startDestination = initialRoute
+                            startDestination = startRoute
                         ) {
                             composable("auth") {
                                 AuthScreen(
                                     onAuthSuccess = {
-                                        prefs.edit().putBoolean("is_logged_in", true).apply()
+                                        val uid = SupabaseManager.auth.currentUserOrNull()?.id ?: "logged_in_user"
+                                        prefs.edit().putString("saved_user_id", uid).putBoolean("is_logged_in", true).commit()
                                         navController.navigate("home") {
                                             popUpTo("auth") { inclusive = true }
                                         }
@@ -97,7 +110,7 @@ class MainActivity : ComponentActivity() {
                                         navController.navigate("settings")
                                     },
                                     onLogout = {
-                                        prefs.edit().putBoolean("is_logged_in", false).apply()
+                                        prefs.edit().clear().commit()
                                         navController.navigate("auth") {
                                             popUpTo("home") { inclusive = true }
                                         }
@@ -110,9 +123,7 @@ class MainActivity : ComponentActivity() {
                                     onBackClick = {
                                         navController.popBackStack()
                                     },
-                                    onProfileClick = {
-                                        /* تعديل الملف الشخصي */
-                                    }
+                                    onProfileClick = {}
                                 )
                             }
 
