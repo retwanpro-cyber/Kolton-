@@ -169,7 +169,7 @@ fun ChatScreen(
                         value = messageText,
                         onValueChange = { messageText = it },
                         placeholder = { 
-                            Text(text = "اكتب رسالة...", color = Color.Gray, fontSize = 14.sp) 
+                            Text(text = "اكتب رسالة...") 
                         },
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
