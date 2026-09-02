@@ -1,6 +1,10 @@
 package com.radwan.nova.ui.screens.settings
 
+import android.app.Activity
+import android.content.Context
+import android.content.res.Configuration
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,9 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
@@ -36,6 +42,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -62,12 +70,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.os.LocaleListCompat
 import coil.compose.AsyncImage
 import com.radwan.nova.data.remote.RemoteProfile
 import com.radwan.nova.data.remote.SupabaseManager
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +90,11 @@ fun SettingsScreen(
     var userProfile by remember { mutableStateOf<RemoteProfile?>(null) }
     var notificationsEnabled by remember { mutableStateOf(true) }
     var darkModeEnabled by remember { mutableStateOf(true) }
+
+    // حالة نافذة اختيار اللغة
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    val currentAppLocale = AppCompatDelegate.getApplicationLocales()[0]?.language ?: Locale.getDefault().language
+    var selectedLanguage by remember { mutableStateOf(currentAppLocale) }
 
     // حالات نافذة تعديل الملف الشخصي
     var showEditProfileDialog by remember { mutableStateOf(false) }
@@ -114,6 +129,29 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         loadUserProfile()
+    }
+
+    fun changeAppLanguage(langCode: String) {
+        val appLocale = LocaleListCompat.forLanguageTags(langCode)
+        AppCompatDelegate.setApplicationLocales(appLocale)
+        
+        // تحديث إعدادات الـ Configuration فورياً
+        val locale = Locale(langCode)
+        Locale.setDefault(locale)
+        val config = Configuration(context.resources.configuration)
+        config.setLocale(locale)
+        config.setLayoutDirection(locale)
+        context.resources.updateConfiguration(config, context.resources.displayMetrics)
+
+        if (context is Activity) {
+            context.recreate()
+        }
+    }
+
+    val currentLanguageTitle = when (selectedLanguage) {
+        "ar" -> "العربية (Arabic)"
+        "fr" -> "Français (الفرنسية)"
+        else -> "English (الإنجليزية)"
     }
 
     Scaffold(
@@ -248,6 +286,15 @@ fun SettingsScreen(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        
+                        // 🌐 خيار تغيير اللغة
+                        SettingsClickItem(
+                            icon = Icons.Default.Language,
+                            title = "لغة التطبيق (Language)",
+                            subtitle = currentLanguageTitle,
+                            onClick = { showLanguageDialog = true }
+                        )
+
                         SettingsToggleItem(
                             icon = Icons.Default.Notifications,
                             title = "الإشعارات التنبيهية",
@@ -277,7 +324,90 @@ fun SettingsScreen(
         }
     }
 
-    // 🌟 نافذة تعديل الملف الشخصي (الاسم، اسم المستخدم، الصورة، والحالة)
+    // 🌐 نافذة اختيار اللغة (العربية / English / Français)
+    if (showLanguageDialog) {
+        Dialog(onDismissRequest = { showLanguageDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFF1E293B),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "اختر لغة التطبيق",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val languages = listOf(
+                        Triple("ar", "العربية", "🇸🇦"),
+                        Triple("en", "English", "🇺🇸"),
+                        Triple("fr", "Français", "🇫🇷")
+                    )
+
+                    languages.forEach { (code, name, flag) ->
+                        val isSelected = selectedLanguage.startsWith(code)
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    selectedLanguage = code
+                                    showLanguageDialog = false
+                                    changeAppLanguage(code)
+                                    Toast.makeText(context, "تم تغيير اللغة إلى $name", Toast.LENGTH_SHORT).show()
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) Color(0xFF2563EB).copy(alpha = 0.2f) else Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = flag, fontSize = 20.sp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = name,
+                                    color = if (isSelected) Color(0xFF60A5FA) else Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color(0xFF60A5FA),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    TextButton(
+                        onClick = { showLanguageDialog = false },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("إغلاق", color = Color(0xFF94A3B8))
+                    }
+                }
+            }
+        }
+    }
+
+    // 🌟 نافذة تعديل الملف الشخصي
     if (showEditProfileDialog) {
         Dialog(onDismissRequest = { if (!isSaving) showEditProfileDialog = false }) {
             Surface(
@@ -418,7 +548,6 @@ fun SettingsScreen(
                                     scope.launch {
                                         isSaving = true
                                         try {
-                                            // تحديث فقط الحقول الموجودة في جدول profiles
                                             val updates = mutableMapOf<String, Any>()
                                             if (editName.isNotBlank()) updates["full_name"] = editName
                                             if (editUsername.isNotBlank()) updates["username"] = editUsername
@@ -512,6 +641,7 @@ fun SettingsToggleItem(
 fun SettingsClickItem(
     icon: ImageVector,
     title: String,
+    subtitle: String? = null,
     onClick: () -> Unit = {}
 ) {
     Row(
@@ -534,12 +664,20 @@ fun SettingsClickItem(
             )
         }
         Spacer(modifier = Modifier.width(14.dp))
-        Text(
-            text = title,
-            color = Color.White,
-            fontSize = 15.sp,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 15.sp
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    color = Color(0xFF60A5FA),
+                    fontSize = 12.sp
+                )
+            }
+        }
         Icon(
             Icons.Default.ChevronRight,
             contentDescription = null,
