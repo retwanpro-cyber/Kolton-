@@ -29,7 +29,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -65,7 +65,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(
     onChatClick: (String, String) -> Unit = { _, _ -> },
-    onLogoutClick: () -> Unit = {},
+    onLogout: () -> Unit = {},
+    onLogoutClick: () -> Unit = onLogout,
     viewModel: HomeViewModel = viewModel()
 ) {
     val chats by viewModel.chats.collectAsState()
@@ -93,7 +94,7 @@ fun HomeScreen(
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
                     }
                     HomeOptionsMenu()
-                    IconButton(onClick = { viewModel.logout { onLogoutClick() } }) {
+                    IconButton(onClick = { viewModel.logout { onLogoutClick(); onLogout() } }) {
                         Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color(0xFFEF4444))
                     }
                 },
@@ -141,7 +142,7 @@ fun HomeScreen(
                     Text(
                         text = "لا توجد محادثات حالياً\nاضغط على + لبدء محادثة جديدة",
                         color = Color.Gray,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        textAlign = TextAlign.Center,
                         fontSize = 15.sp
                     )
                 }
@@ -244,12 +245,14 @@ fun HomeScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(availableUsers) { user ->
+                                val displayName = user.fullName ?: user.username ?: "مستخدم"
+                                val displayUser = user.username ?: ""
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
                                             showNewChatDialog = false
-                                            onChatClick(user.id, user.full_name ?: user.username)
+                                            onChatClick(user.id, displayName)
                                         },
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
                                     shape = RoundedCornerShape(12.dp)
@@ -275,16 +278,18 @@ fun HomeScreen(
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column {
                                             Text(
-                                                text = user.full_name ?: user.username,
+                                                text = displayName,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color.White,
                                                 fontSize = 15.sp
                                             )
-                                            Text(
-                                                text = "@${user.username}",
-                                                color = Color.Gray,
-                                                fontSize = 12.sp
-                                            )
+                                            if (displayUser.isNotBlank()) {
+                                                Text(
+                                                    text = "@$displayUser",
+                                                    color = Color.Gray,
+                                                    fontSize = 12.sp
+                                                )
+                                            }
                                         }
                                     }
                                 }
