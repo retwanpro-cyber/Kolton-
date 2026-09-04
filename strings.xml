@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NOVA Chat</string>
+
+    <!-- Navigation & Main Screen -->
+    <string name="chats_title">NOVA Chat</string>
+    <string name="new_chat">New Chat</string>
+    <string name="search_hint">Search conversations or users...</string>
+    <string name="no_chats_found">No conversations yet</string>
+    <string name="start_chat_prompt">Tap the button below to start a new chat</string>
+    <string name="selected_count">%1$d selected</string>
+    <string name="delete_chats">Delete</string>
+    <string name="delete_confirm_title">Delete Conversation?</string>
+    <string name="delete_confirm_message">Are you sure you want to delete the selected conversation(s)? This cannot be undone.</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+
+    <!-- Chat Screen -->
+    <string name="type_message">Type a message...</string>
+    <string name="send">Send</string>
+    <string name="online">Online</string>
+    <string name="offline">Offline</string>
+    <string name="today">Today</string>
+    <string name="yesterday">Yesterday</string>
+    <string name="empty_chat">Say hello and start the conversation!</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="profile_section">Profile</string>
+    <string name="role_admin">Administrator</string>
+    <string name="role_user">User</string>
+    <string name="app_language">App Language</string>
+    <string name="language_system">System Default</string>
+    <string name="language_arabic">العربية (Arabic)</string>
+    <string name="language_english">English</string>
+    <string name="notifications">Notifications</string>
+    <string name="notifications_desc">Receive alerts for new messages</string>
+    <string name="dark_mode">Dark Mode</string>
+    <string name="dark_mode_desc">Midnight navy theme</string>
+    <string name="privacy_e2ee">End-to-End Encryption (E2EE)</string>
+    <string name="privacy_desc">All messages are encrypted and private</string>
+    <string name="storage_cache">Storage &amp; Cache</string>
+    <string name="clear_cache">Clear Cache</string>
+    <string name="cache_cleared">Cache cleared successfully</string>
+    <string name="developer_contact">Developer Contact</string>
+    <string name="email_label">Email: retwan.tech@gmail.com</string>
+    <string name="facebook_label">Facebook: Ridwan Almasouri</string>
+    <string name="app_version">Version 1.0.0 (APKPure Edition)</string>
+    <string name="logout">Sign Out</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_name">NOVA Chat Messages</string>
+    <string name="notification_channel_desc">Alerts for incoming chat messages</string>
+    <string name="new_message_notification">You have a new message</string>
+</resources>
