@@ -42,6 +42,8 @@ import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
+    private var currentLangCode: String = ""
+
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleHelper.onAttach(newBase))
     }
@@ -49,11 +51,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         LanguageManager.init(this)
+        currentLangCode = LocaleHelper.getLanguage(this)
 
         val prefs = getSharedPreferences("nova_auth_prefs", Context.MODE_PRIVATE)
 
         setContent {
-            // المتابعة الفورية والتلقائية للغة
             val isArabic = LanguageManager.currentLanguage == "ar"
             val layoutDirection = if (isArabic) LayoutDirection.Rtl else LayoutDirection.Ltr
 
@@ -165,13 +167,24 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // فحص لغة الهاتف فور عودة المستخدم للتطبيق وتحديثها فوراً
-        LanguageManager.syncWithSystem(this)
+        // فحص لغة الجهاز الحالية
+        val activeLang = LocaleHelper.getLanguage(this)
+        if (currentLangCode.isNotEmpty() && currentLangCode != activeLang) {
+            currentLangCode = activeLang
+            LanguageManager.init(this)
+            recreate()
+        } else {
+            LanguageManager.syncWithSystem(this)
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // التقاط تغيير لغة الجهاز لحظياً
         LanguageManager.onConfigurationChanged(this, newConfig)
+        val activeLang = LocaleHelper.getLanguage(this)
+        if (currentLangCode != activeLang) {
+            currentLangCode = activeLang
+            recreate()
+        }
     }
 }
