@@ -12,29 +12,57 @@ object LocaleHelper {
     private const val KEY_LANGUAGE = "app_language"
 
     fun onAttach(context: Context): Context {
-        val lang = getPersistedLanguage(context)
-        return setLocale(context, lang)
+        val lang = getLanguage(context)
+        return updateResources(context, lang)
+    }
+
+    /**
+     * إرجاع لغة التطبيق:
+     * إذا اختار المستخدم لغة مخصصة يدوياً (غير system) نرجعها.
+     * إذا لم يختر أو اختار تلقائي نرجع لغة الهاتف الفعلية فوراً!
+     */
+    fun getLanguage(context: Context): String {
+        val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val savedLang = prefs.getString(KEY_LANGUAGE, null)
+        
+        if (!savedLang.isNullOrBlank() && savedLang != "system") {
+            return savedLang
+        }
+
+        // قراءة لغة الهاتف الحالية من النظام مباشرة
+        val deviceLocale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            context.resources.configuration.locales.get(0) ?: Locale.getDefault()
+        } else {
+            @Suppress("DEPRECATION")
+            context.resources.configuration.locale ?: Locale.getDefault()
+        }
+
+        val langCode = deviceLocale.language.lowercase()
+        return when {
+            langCode.startsWith("ar") -> "ar"
+            langCode.startsWith("fr") -> "fr"
+            else -> "en"
+        }
     }
 
     fun getPersistedLanguage(context: Context): String {
-        val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        // إذا لم يختر المستخدم لغة سابقاً، نأخذ لغة الهاتف الافتراضية
-        val defaultDeviceLang = Locale.getDefault().language
-        return prefs.getString(KEY_LANGUAGE, if (defaultDeviceLang == "ar") "ar" else "en") ?: "en"
+        return getLanguage(context)
     }
 
     fun setLocale(context: Context, language: String): Context {
-        persist(context, language)
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_LANGUAGE, language).apply()
         return updateResources(context, language)
     }
 
-    private fun persist(context: Context, language: String) {
+    fun resetToSystem(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_LANGUAGE, language).apply()
+        prefs.edit().remove(KEY_LANGUAGE).apply()
     }
 
     private fun updateResources(context: Context, language: String): Context {
-        val locale = Locale(language)
+        val targetLang = if (language == "system") getLanguage(context) else language
+        val locale = Locale(targetLang)
         Locale.setDefault(locale)
 
         val resources = context.resources
@@ -47,10 +75,7 @@ object LocaleHelper {
             configuration.locale = locale
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-            configuration.setLayoutDirection(locale)
-        }
-
+        configuration.setLayoutDirection(locale)
         return context.createConfigurationContext(configuration)
     }
 }
