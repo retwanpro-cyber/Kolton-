@@ -142,6 +142,21 @@ fun HomeScreen(
     var showNewChatDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
+    // تحديث حالة الاتصال للمستخدم الحالي إلى متصل فور الدخول للشاشة
+    LaunchedEffect(currentUserId) {
+        if (currentUserId.isNotBlank()) {
+            try {
+                SupabaseManager.postgrest["profiles"].update(
+                    mapOf("is_online" to true)
+                ) {
+                    filter { eq("id", currentUserId) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     BackHandler(enabled = isSelectionMode) {
         isSelectionMode = false
         selectedChatIds = emptySet()
@@ -306,6 +321,14 @@ fun HomeScreen(
                                         menuExpanded = false
                                         scope.launch {
                                             try {
+                                                // تحويل حالة الاتصال إلى false قبل تسجيل الخروج
+                                                if (currentUserId.isNotBlank()) {
+                                                    SupabaseManager.postgrest["profiles"].update(
+                                                        mapOf("is_online" to false)
+                                                    ) {
+                                                        filter { eq("id", currentUserId) }
+                                                    }
+                                                }
                                                 SupabaseManager.auth.signOut()
                                             } catch (e: Exception) {
                                                 e.printStackTrace()
@@ -661,7 +684,7 @@ fun HomeScreen(
                             .fillMaxSize()
                             .padding(innerPadding)
                     ) {
-                        // شريط البحث المباشر
+                        // شريط البحث
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
@@ -689,7 +712,7 @@ fun HomeScreen(
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         )
 
-                        // الزرّان بالأعلى: المتصلون الآن | غير المتصلين
+                        // الزرّان: المتصلون الآن | غير المتصلين
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -814,7 +837,6 @@ fun HomeScreen(
                                             modifier = Modifier.padding(12.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            // الصورة الرمزية ومؤشر الاتصال
                                             Box {
                                                 Surface(
                                                     modifier = Modifier.size(48.dp),
